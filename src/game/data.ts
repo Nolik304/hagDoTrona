@@ -89,6 +89,10 @@ export const ZONES: ZoneDef[] = [
   { name: "Логово разбойников", flavor: "Вход бесплатный. Выход — по тарифу", mobs: ["bandit", "thrower", "ogre"], boss: "ataman", tint: "#e0a34e" },
   { name: "Цитадель Пустоты", flavor: "Здесь даже эхо говорит шёпотом", mobs: ["wisp", "golem", "acolyte"], boss: "devourer", tint: "#9b7bd8" },
   { name: "Бездна", flavor: "Бесконечный этаж. Лифт не предусмотрен", mobs: ["voidling", "golem", "wisp"], boss: "voidmaw", tint: "#ff6b8d", endless: true },
+  { name: "Разлом Эха", flavor: "Здесь звук приходит раньше, чем его источник", mobs: ["voidling", "acolyte", "golem"], boss: "devourer", tint: "#7fe0d0" },
+  { name: "Сад Костей", flavor: "Цветёт всё. К сожалению", mobs: ["skel", "shroom", "bat"], boss: "boneTyrant", tint: "#c9d4de" },
+  { name: "Город Цепей", flavor: "В каждом доме жилец. На цепи", mobs: ["bandit", "golem", "wisp"], boss: "ataman", tint: "#e0a34e" },
+  { name: "Трон Пустоты", flavor: "Трон занят. Давно. Навсегда", mobs: ["acolyte", "voidling", "wisp"], boss: "devourer", tint: "#9b7bd8" },
 ];
 
 export const MOBS: Record<string, { n: string; c1: string; c2: string }> = {
@@ -193,6 +197,7 @@ const STAT_BASE: Record<StatKey, (ilvl: number) => number> = {
   dmg: il => 2 + il * 0.85,
   dmgPct: il => 3 + il * 0.12,
   hp: il => 9 + il * 2.1,
+  hpPct: () => 2,
   armor: il => 1.5 + il * 0.45,
   crit: () => 2,
   critDmg: () => 7,
@@ -204,7 +209,7 @@ const STAT_BASE: Record<StatKey, (ilvl: number) => number> = {
 };
 
 export const STAT_LABEL: Record<StatKey, string> = {
-  dmg: "Урон", dmgPct: "Урон %", hp: "Здоровье", armor: "Броня",
+  dmg: "Урон", dmgPct: "Урон %", hp: "Здоровье", hpPct: "Здоровье %", armor: "Броня",
   crit: "Крит %", critDmg: "Крит. урон %", as: "Скор. атаки %",
   goldPct: "Золото %", xpPct: "Опыт %", luck: "Удача %", regen: "Реген %/с",
 };
@@ -270,6 +275,146 @@ export const mmrRank = (mmr: number) =>
   mmr < 1650 ? "Чемпион" : mmr < 1900 ? "Мастер" : "Легенда Бездны";
 export const DUEL_TOKENS_START = 3;
 export const DUEL_TOKENS_MAX = 10;
+
+/* ================= АТЛАС: ПУТИ ================= */
+export interface PathDef {
+  id: string; name: string; icon: string; color: string; desc: string;
+  mods: Partial<Record<StatKey, number>>; // за уровень пути
+}
+export const PATHS: PathDef[] = [
+  { id: "arcan", name: "Аркан", icon: "staff", color: "#4cc3ff", desc: "Путь чистого урона. Чем глубже в тайны, тем жирнее цифры.", mods: { dmgPct: 2.2, xpPct: 1 } },
+  { id: "hunt", name: "Охота", icon: "bow", color: "#4ade80", desc: "Путь скорости и точности. Стрелять первым — это традиция.", mods: { as: 1.6, crit: 0.7 } },
+  { id: "curse", name: "Проклятие", icon: "skull", color: "#c084fc", desc: "Путь чернокнижника. Криты такие, что боссы пишут завещание.", mods: { critDmg: 5, dmgPct: 1.2 } },
+  { id: "beast", name: "Зверь", icon: "clover", color: "#f0b429", desc: "Путь призывателя. Удача и золото сами идут в руки. С когтями.", mods: { luck: 2.2, goldPct: 1.6 } },
+  { id: "flesh", name: "Плоть", icon: "heart", color: "#ff6b8d", desc: "Путь гуля. Бессмертие — это просто очень много здоровья.", mods: { hpPct: 2.2, regen: 0.18, armor: 2.5 } },
+];
+export const PATH_LEVEL_CAP = 40;
+export const pathXpNeed = (lvl: number) => Math.round(120 * Math.pow(lvl, 1.85));
+export const PATH_SWITCH_COST = 40; // кристаллы за смену пути
+
+/* ================= СЕТЫ ================= */
+export interface SetDef {
+  id: string; name: string; path: string | null; tier: number; color: string; icon: string;
+  pieces: BaseSlot[];
+  bias: StatKey[];
+  bonuses: { need: number; mods: Partial<Record<StatKey, number>> }[];
+}
+export const SETS: SetDef[] = [
+  {
+    id: "dawn", name: "Рассвет Аркана", path: "arcan", tier: 1, color: "#4cc3ff", icon: "star",
+    pieces: ["weapon", "helm", "amulet", "armor", "ring"], bias: ["dmgPct", "crit", "xpPct"],
+    bonuses: [
+      { need: 2, mods: { dmgPct: 8 } },
+      { need: 3, mods: { crit: 5, xpPct: 8 } },
+      { need: 5, mods: { dmgPct: 14, critDmg: 22 } },
+    ],
+  },
+  {
+    id: "huntset", name: "Дикая Охота", path: "hunt", tier: 1, color: "#4ade80", icon: "arrows",
+    pieces: ["weapon", "gloves", "boots", "helm", "ring"], bias: ["as", "crit", "dmgPct"],
+    bonuses: [
+      { need: 2, mods: { as: 8 } },
+      { need: 3, mods: { crit: 6, dmgPct: 6 } },
+      { need: 5, mods: { as: 10, critDmg: 20 } },
+    ],
+  },
+  {
+    id: "grave", name: "Хранитель Могил", path: "curse", tier: 2, color: "#c084fc", icon: "skull",
+    pieces: ["weapon", "helm", "armor", "amulet", "boots"], bias: ["critDmg", "crit", "dmgPct"],
+    bonuses: [
+      { need: 2, mods: { critDmg: 18 } },
+      { need: 3, mods: { crit: 6, dmgPct: 8 } },
+      { need: 5, mods: { critDmg: 30, dmgPct: 12 } },
+    ],
+  },
+  {
+    id: "rabbit", name: "Лапа Кролика", path: "beast", tier: 2, color: "#f0b429", icon: "clover",
+    pieces: ["gloves", "boots", "amulet", "ring", "helm"], bias: ["luck", "goldPct", "xpPct"],
+    bonuses: [
+      { need: 2, mods: { luck: 15 } },
+      { need: 3, mods: { goldPct: 14, xpPct: 8 } },
+      { need: 5, mods: { luck: 25, goldPct: 16 } },
+    ],
+  },
+  {
+    id: "feast", name: "Кровавый Пир", path: "flesh", tier: 3, color: "#ff6b8d", icon: "fang",
+    pieces: ["weapon", "armor", "gloves", "ring", "amulet"], bias: ["hp", "dmgPct", "armor"],
+    bonuses: [
+      { need: 2, mods: { hpPct: 12 } },
+      { need: 3, mods: { dmgPct: 10, regen: 0.8 } },
+      { need: 5, mods: { hpPct: 18, dmgPct: 14 } },
+    ],
+  },
+  {
+    id: "idol", name: "Золотой Идол", path: null, tier: 3, color: "#ffd166", icon: "coin",
+    pieces: ["amulet", "ring", "boots", "helm"], bias: ["goldPct", "luck", "xpPct"],
+    bonuses: [
+      { need: 2, mods: { goldPct: 18 } },
+      { need: 3, mods: { luck: 18, xpPct: 8 } },
+      { need: 4, mods: { goldPct: 26, luck: 20 } },
+    ],
+  },
+  {
+    id: "starweave", name: "Звёздный Ткач", path: "arcan", tier: 4, color: "#7ee8d6", icon: "spark",
+    pieces: ["weapon", "amulet", "ring", "helm", "armor", "boots"], bias: ["xpPct", "dmgPct", "crit"],
+    bonuses: [
+      { need: 2, mods: { xpPct: 14 } },
+      { need: 4, mods: { dmgPct: 12, crit: 6 } },
+      { need: 6, mods: { xpPct: 20, dmgPct: 16, critDmg: 24 } },
+    ],
+  },
+  {
+    id: "bonecrown", name: "Костяная Корона", path: "curse", tier: 4, color: "#e8e2d0", icon: "crown",
+    pieces: ["helm", "armor", "weapon", "gloves", "ring"], bias: ["crit", "armor", "hp"],
+    bonuses: [
+      { need: 2, mods: { armor: 30 } },
+      { need: 3, mods: { crit: 8, hpPct: 8 } },
+      { need: 5, mods: { critDmg: 26, armor: 40, hpPct: 10 } },
+    ],
+  },
+  {
+    id: "ironoath", name: "Железная Клятва", path: "flesh", tier: 2, color: "#9aa4b2", icon: "shield",
+    pieces: ["armor", "helm", "gloves", "boots"], bias: ["armor", "hp", "regen"],
+    bonuses: [
+      { need: 2, mods: { armor: 24 } },
+      { need: 3, mods: { hpPct: 10, regen: 0.6 } },
+      { need: 4, mods: { armor: 36, hpPct: 12 } },
+    ],
+  },
+  {
+    id: "wildfang", name: "Клык Пустоши", path: "hunt", tier: 3, color: "#e0a34e", icon: "fang",
+    pieces: ["weapon", "gloves", "boots", "ring"], bias: ["dmg", "as", "critDmg"],
+    bonuses: [
+      { need: 2, mods: { dmgPct: 9 } },
+      { need: 3, mods: { as: 9, crit: 5 } },
+      { need: 4, mods: { dmgPct: 14, critDmg: 24 } },
+    ],
+  },
+];
+export const SET_PIECE_NAMES: Record<BaseSlot, string> = {
+  weapon: "Клык", helm: "Венец", amulet: "Оберег", armor: "Панцирь",
+  gloves: "Хват", boots: "Поступь", ring: "Печать",
+};
+export const setPoolForTier = (tier: number): SetDef[] => SETS.filter(x => x.tier <= tier);
+
+/* ================= ПАТИ-ПОДЗЕМЕЛЬЯ ================= */
+export interface DungeonDef {
+  tier: number; name: string; desc: string; bossKey: string;
+  minLevel: number; needWins: number;
+}
+export const DUNGEONS: DungeonDef[] = [
+  { tier: 1, name: "Погребок Шёпотов", desc: "Тихое место. Слишком тихое", bossKey: "treant", minLevel: 12, needWins: 0 },
+  { tier: 2, name: "Костехранилище", desc: "Скелеты хранят тут не только кости", bossKey: "boneTyrant", minLevel: 18, needWins: 2 },
+  { tier: 3, name: "Логово Атамана", desc: "Шлык дома. И он не один", bossKey: "ataman", minLevel: 25, needWins: 5 },
+  { tier: 4, name: "Разлом Эха", desc: "Эхо здесь отвечает первым", bossKey: "devourer", minLevel: 32, needWins: 9 },
+  { tier: 5, name: "Сердце Бездны", desc: "Финальная точка маршрута. Пока что", bossKey: "voidmaw", minLevel: 40, needWins: 14 },
+];
+export const PARTY_TICKETS_DAILY = 3;
+export const PARTY_TIME = 60; // сек на убийство босса
+export const MATE_NAMES = [
+  "Борода из Бряцании", "Тихоня Лю", "Сэр Швабра", "Матушка Гроза",
+  "Хмырь", "Дон Кихот 2.0", "Ведьмочка Чуча", "Капитан Очевидность",
+];
 export const QUESTS: QuestDef[] = [
   { id: "q1", title: "Разминка", desc: "Победи 15 врагов", metric: "kills", target: 15, reward: { gold: 120 }, flavor: "Гильдия даёт новичкам самое грязное дело. Держи метлу... то есть меч." },
   { id: "q2", title: "Приодеться", desc: "Надень 3 предмета экипировки", metric: "equippedCount", target: 3, reward: { gold: 200, gems: 3 }, flavor: "Голый герой — плохая реклама для гильдии." },
