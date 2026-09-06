@@ -107,6 +107,39 @@ export interface WeeklyS {
   claimed: string[];
 }
 
+export interface DuelFoe {
+  name: string;
+  classId: ClassId;
+  mmr: number;
+  hp: number;
+  maxHp: number;
+  dmg: number;
+  as: number;
+  crit: number;
+  critDmg: number;
+}
+
+export interface DuelS {
+  state: "idle" | "search" | "fight" | "result";
+  mmr: number;
+  tokens: number;
+  wins: number;
+  losses: number;
+  searchT: number;
+  foe: DuelFoe | null;
+  heroHp: number;
+  heroT: number;
+  foeT: number;
+  skillT: number;
+  foeSkillT: number;
+  cds: Record<string, number>;
+  fx: Fx[];
+  log: string[];
+  result: "win" | "lose" | null;
+  delta: number;
+  reward: number;
+}
+
 export interface RunS {
   active: boolean;
   wave: number; // 1..20
@@ -155,6 +188,7 @@ export interface GameState {
   shards: number; // осколки бездны — мета-валюта
   meta: Record<string, number>; // мета-апгрейды (Алтарь)
   bestWave: number;
+  duel: DuelS;
   shopBuys: Record<string, number>;
   lastSeen: number;
   uidSeq: number;
@@ -205,6 +239,9 @@ export type Action =
   | { type: "RUN_PICK"; id: string }
   | { type: "RUN_CLOSE" }
   | { type: "BUY_META"; id: string }
+  | { type: "DUEL_SEARCH" }
+  | { type: "DUEL_CAST"; id: string }
+  | { type: "DUEL_CLOSE" }
   | { type: "CLOSE_MODAL" }
   | { type: "DISMISS_TOAST"; id: number }
   | { type: "RESET" };

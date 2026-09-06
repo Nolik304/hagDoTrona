@@ -1,9 +1,9 @@
 import {
   CLASSES, SKILLS, PASSIVES, ZONES, MOBS, KILL_PHRASES, QUESTS, DAILIES, WEEKLIES, ACHS,
   genItem, INV_CAP, skillCost, shopCost, SHOP, VIP_LEVELS, SLOT_UP_BONUS, SLOT_UP_MAX, slotUpCost,
-  RELICS, META, RUN_WAVES, RUN_BOSS_EVERY, shardReward,
+  RELICS, META, RUN_WAVES, RUN_BOSS_EVERY, shardReward, DUEL_NAMES, DUEL_TOKENS_START,
 } from "./data";
-import type { Action, Enemy, GameState, RunS, Slot, Stats } from "./types";
+import type { Action, DuelFoe, DuelS, Enemy, GameState, RunS, Slot, Stats } from "./types";
 
 export const SAVE_KEY = "bezdna-idle-save-v1";
 export const SLOTS: Slot[] = ["weapon", "helm", "amulet", "armor", "gloves", "boots", "ring1", "ring2"];
@@ -37,6 +37,12 @@ export const fmtTime = (sec: number) => {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
   return h > 0 ? `${h} ч ${m} мин` : `${m} мин`;
 };
+
+export const newDuel = (): DuelS => ({
+  state: "idle", mmr: 1000, tokens: DUEL_TOKENS_START, wins: 0, losses: 0,
+  searchT: 0, foe: null, heroHp: 0, heroT: 0, foeT: 0, skillT: 0, foeSkillT: 0,
+  cds: {}, fx: [], log: [], result: null, delta: 0, reward: 0,
+});
 
 /* =============== derived stats =============== */
 export function getStats(s: GameState): Stats {
@@ -425,6 +431,7 @@ export function newGame(): GameState {
     shards: 0,
     meta: {},
     bestWave: 0,
+    duel: newDuel(),
     shopBuys: {}, lastSeen: Date.now(), uidSeq: 1, fxSeq: 1, toastSeq: 1,
   };
 }
@@ -742,6 +749,36 @@ export function reducer(s: GameState, a: Action): GameState {
       return st;
     }
 
+    case "DUEL_SEARCH": {
+      const duel = { ...s.duel, cds: { ...s.duel.cds }, fx: [...s.duel.fx], log: [...s.duel.log] };
+      if (duel.state === "search" || duel.state === "fight") return s;
+      if (duel.tokens < 1) { const st = { ...s, duel }; toast(st, "Нет жетонов дуэлей", "warn"); return st; }
+      duel.tokens -= 1;
+      duel.state = "search";
+      duel.searchT = 1.2 + Math.random() * 1.3;
+      duel.result = null;
+      return { ...s, duel };
+    }
+
+    case "DUEL_CAST": {
+      const def = SKILLS.find(skill => skill.id === a.id && skill.classId === s.hero.classId);
+      if (!def || s.duel.state !== "fight" || !s.duel.foe || s.hero.level < def.unlockLevel || (s.duel.cds[a.id] || 0) > 0) return s;
+      const duel = { ...s.duel, cds: { ...s.duel.cds }, fx: [...s.duel.fx], log: [...s.duel.log], foe: { ...s.duel.foe } };
+      duel.cds[a.id] = def.cd;
+      const stats = getStats(s);
+      const lvl = s.skills[a.id] || 1;
+      for (let i = 0; i < def.hits(lvl); i++) {
+        let damage = stats.dmg * def.mult(lvl) * (0.9 + Math.random() * 0.2);
+        if (Math.random() * 100 < stats.crit) damage *= stats.critDmg / 100;
+        duel.foe.hp -= Math.max(1, Math.round(damage));
+      }
+      duel.log = [`Ваш «${def.name}» попадает в цель!`, ...duel.log].slice(0, 5);
+      return duel.foe.hp <= 0 ? finishDuel({ ...s, duel }, true) : { ...s, duel };
+    }
+
+    case "DUEL_CLOSE":
+      return { ...s, duel: { ...newDuel(), mmr: s.duel.mmr, tokens: s.duel.tokens, wins: s.duel.wins, losses: s.duel.losses } };
+
     case "CLOSE_MODAL": return { ...s, modal: null };
     case "DISMISS_TOAST": return { ...s, toasts: s.toasts.filter(t => t.id !== a.id) };
     case "RESET": {
@@ -750,6 +787,41 @@ export function reducer(s: GameState, a: Action): GameState {
     }
     default: return s;
   }
+}
+
+function finishDuel(s: GameState, win: boolean): GameState {
+  const foe = s.duel.foe;
+  const expected = foe ? 1 / (1 + Math.pow(10, (foe.mmr - s.duel.mmr) / 400)) : 0.5;
+  const delta = win ? Math.max(6, Math.round(32 * (1 - expected))) : -Math.max(6, Math.round(32 * expected));
+  const reward = Math.round(win ? 100 + s.duel.mmr * 0.15 + Math.random() * 80 : 20 + s.duel.mmr * 0.03);
+  const duel = { ...s.duel, state: "result" as const, result: win ? "win" as const : "lose" as const, mmr: Math.max(100, s.duel.mmr + delta), delta, reward, wins: s.duel.wins + (win ? 1 : 0), losses: s.duel.losses + (win ? 0 : 1), log: [`${foe?.name ?? "Соперник"}: ${win ? "победа" : "поражение"}`, ...s.duel.log].slice(0, 5) };
+  return { ...s, duel, hero: { ...s.hero, gold: s.hero.gold + reward }, totals: { ...s.totals, goldEarned: s.totals.goldEarned + reward } };
+}
+
+function duelTick(s: GameState, dt: number) {
+  const duel = s.duel;
+  duel.fx = duel.fx.map(f => ({ ...f, life: f.life - dt })).filter(f => f.life > 0);
+  for (const key of Object.keys(duel.cds)) duel.cds[key] = Math.max(0, duel.cds[key] - dt);
+  if (duel.state === "search") {
+    duel.searchT -= dt;
+    if (duel.searchT <= 0) {
+      const stats = getStats(s);
+      const mmr = Math.max(100, duel.mmr + Math.round(Math.random() * 460 - 230));
+      const scale = (0.85 + Math.random() * 0.3) * (1 + (mmr - duel.mmr) / 1600);
+      const maxHp = Math.round(stats.maxHp * scale);
+      const foe: DuelFoe = { name: DUEL_NAMES[Math.floor(Math.random() * DUEL_NAMES.length)], classId: Math.random() < 0.5 ? "mage" : "archer", mmr, hp: maxHp, maxHp, dmg: stats.dps / stats.as * scale, as: stats.as * (0.9 + Math.random() * 0.25), crit: Math.min(70, stats.crit), critDmg: stats.critDmg };
+      duel.foe = foe; duel.heroHp = stats.maxHp; duel.heroT = 0; duel.foeT = 0; duel.skillT = 7; duel.foeSkillT = 5.5; duel.state = "fight";
+    }
+    return;
+  }
+  if (duel.state !== "fight" || !duel.foe) return;
+  const stats = getStats(s);
+  duel.heroT += stats.as * dt;
+  if (duel.heroT >= 1) { duel.heroT -= 1; duel.foe.hp -= Math.max(1, Math.round(stats.dmg * (0.9 + Math.random() * 0.2))); }
+  if (duel.foe.hp <= 0) { Object.assign(s, finishDuel(s, true)); return; }
+  duel.foeT += duel.foe.as * dt;
+  if (duel.foeT >= 1) { duel.foeT -= 1; duel.heroHp -= Math.max(1, Math.round(duel.foe.dmg * (1 - stats.mit))); }
+  if (duel.heroHp <= 0) { duel.heroHp = 0; Object.assign(s, finishDuel(s, false)); }
 }
 
 /* =============== tick =============== */
@@ -774,7 +846,13 @@ function runTick(s: GameState, dt: number): GameState {
 }
 
 function tick(s: GameState, dt: number): GameState {
-  if (s.run.active) return runTick(s, dt);
+  const base = s.run.active ? runTick(s, dt) : s;
+  if (base.duel.state !== "idle" || base.duel.fx.length) {
+    const st = { ...base, duel: { ...base.duel, cds: { ...base.duel.cds }, fx: base.duel.fx.map(f => ({ ...f })), log: [...base.duel.log], foe: base.duel.foe ? { ...base.duel.foe } : null } };
+    duelTick(st, dt);
+    return st;
+  }
+  if (s.run.active) return base;
   if (!s.battle.enemy && !s.battle.fx.length && !s.buffs.length) {
     // даже без боя нужны сбросы дня/недели
     const daily = s.daily.date !== todayStr() ? { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] as string[] } : s.daily;
@@ -936,6 +1014,7 @@ export function loadGame(): GameState {
   if (s.shards == null) s.shards = 0;
   if (!s.meta) s.meta = {};
   if (s.bestWave == null) s.bestWave = 0;
+  if (!s.duel) s.duel = newDuel();
   // если герой застрял мёртвым в старом сейве — сразу воскрешаем
   if (s.hero.hp <= 0) s.hero = { ...s.hero, hp: Math.round(getStats(s).maxHp * 0.6) };
   if (s.battle.paused && s.battle.respawnT <= 0 && s.battle.enemy) s.battle.paused = false;

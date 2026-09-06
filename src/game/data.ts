@@ -63,6 +63,16 @@ export const SKILLS: SkillDef[] = [
 
 export const skillCost = (lvl: number) => Math.round(70 * Math.pow(2.15, lvl - 1));
 
+export const DUEL_NAMES = [
+  "Шмыга Одноглазый", "Барон фон Тыква", "Лысый Джакомо", "Сэр Помидор",
+  "Хозяйка Болота", "Граф Носок", "Ведьма с 8-го этажа", "Кузнец Хряк",
+  "Тёмный Олег", "Инквизитор Булка", "Паладин Штифт", "Жнец-стажёр",
+];
+export const mmrRank = (mmr: number) =>
+  mmr < 900 ? "Новичок" : mmr < 1150 ? "Боец" : mmr < 1400 ? "Гладиатор" : mmr < 1650 ? "Чемпион" : mmr < 1900 ? "Мастер" : "Легенда Бездны";
+export const DUEL_TOKENS_START = 3;
+export const DUEL_TOKENS_MAX = 10;
+
 /* ================= PASSIVES ================= */
 export interface PassiveDef {
   id: string; name: string; icon: string; max: number;
