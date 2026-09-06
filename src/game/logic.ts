@@ -1,6 +1,6 @@
 import {
-  CLASSES, SKILLS, PASSIVES, ZONES, MOBS, KILL_PHRASES, QUESTS, DAILIES, ACHS,
-  genItem, INV_CAP, skillCost, shopCost, SHOP,
+  CLASSES, SKILLS, PASSIVES, ZONES, MOBS, KILL_PHRASES, QUESTS, DAILIES, WEEKLIES, ACHS,
+  genItem, INV_CAP, skillCost, shopCost, SHOP, VIP_LEVELS, SLOT_UP_BONUS, SLOT_UP_MAX, slotUpCost,
 } from "./data";
 import type { Action, Enemy, GameState, Slot, Stats } from "./types";
 
@@ -9,6 +9,22 @@ export const SLOTS: Slot[] = ["weapon", "helm", "amulet", "armor", "gloves", "bo
 
 export const todayStr = () => new Date().toISOString().slice(0, 10);
 export const xpNeed = (level: number) => Math.floor(50 * Math.pow(level, 1.55));
+
+/** ISO-неделя вида "2026-W7" для еженедельников */
+export function weekKey(d = new Date()): string {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${week}`;
+}
+
+/** Время до автовоскрешения: 3 сек базово, VIP ускоряет */
+export const respawnTime = (vip: number) =>
+  vip > 0 && VIP_LEVELS[vip - 1] ? VIP_LEVELS[vip - 1].respawn : 3;
+
+export const emptyWeekly = () => ({ week: weekKey(), kills: 0, bosses: 0, gold: 0, casts: 0, claimed: [] as string[] });
 
 export function fmt(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(1) + "Б";
@@ -30,8 +46,10 @@ export function getStats(s: GameState): Stats {
   for (const slot of SLOTS) {
     const it = s.equip[slot];
     if (!it) continue;
+    // заточка слота: бонус живёт в слоте, а не в предмете
+    const slotMult = 1 + (SLOT_UP_BONUS / 100) * (s.slotLevel[slot] || 0);
     for (const [k, v] of Object.entries(it.stats)) {
-      const val = v ?? 0;
+      const val = (v ?? 0) * slotMult;
       switch (k) {
         case "dmg": flatDmg += val; break;
         case "dmgPct": dmgPct += val; break;
@@ -51,6 +69,13 @@ export function getStats(s: GameState): Stats {
   dmgPct += 8 * P("power"); crit += 2.5 * P("focus"); hpPct += 8 * P("vitality");
   armor += 6 * P("skin"); goldPct += 8 * P("greed"); xpPct += 7 * P("wisdom");
   luck += 5 * P("fortune"); offlinePct += 12 * P("treasury");
+
+  // VIP-привилегии (кумулятивные)
+  if (s.vip > 0) {
+    const vip = VIP_LEVELS[Math.min(s.vip, VIP_LEVELS.length) - 1];
+    goldPct += vip.goldPct; xpPct += vip.xpPct; luck += vip.luck;
+    dmgPct += vip.dmgPct; hpPct += vip.hpPct; offlinePct += vip.offlinePct;
+  }
 
   let dmgBuff = 1, luckBuff = 0;
   for (const b of s.buffs) { if (b.dmgMult) dmgBuff *= b.dmgMult; if (b.luckAdd) luckBuff += b.luckAdd; }
@@ -152,12 +177,14 @@ function killEnemy(st: GameState, stats: Stats) {
   st.battle.enemy = null;
   st.totals.kills += 1;
   st.daily.kills += 1;
-  if (e.boss) { st.totals.bosses += 1; st.daily.bosses += 1; }
+  st.weekly.kills += 1;
+  if (e.boss) { st.totals.bosses += 1; st.daily.bosses += 1; st.weekly.bosses += 1; }
 
   const gold = Math.round(e.gold * (1 + stats.goldPct / 100));
   st.hero.gold += gold;
   st.totals.goldEarned += gold;
   st.daily.gold += gold;
+  st.weekly.gold += gold;
   pushFx(st, `+${fmt(gold)}`, "gold", 40 + Math.random() * 20, 55);
   gainXp(st, Math.round(e.xp * (1 + stats.xpPct / 100)));
 
@@ -203,8 +230,9 @@ function enemyHit(st: GameState, stats: Stats) {
     const lost = Math.floor(st.hero.gold * 0.2);
     st.hero.gold -= lost;
     st.totals.deaths += 1;
-    st.modal = { t: "death", lost };
-    pushLog(st, "Вы пали. Гоблины уже делят ваши ботинки");
+    // автовоскрешение: никакой вечной модалки, таймер тикает в TICK
+    st.battle.respawnT = respawnTime(st.vip);
+    pushLog(st, `Вы пали (−${fmt(lost)} зол.). Автовоскрешение через ${st.battle.respawnT} с...`);
   }
 }
 
@@ -230,6 +258,10 @@ export function getMetric(s: GameState, key: string): number {
     case "dkills": return s.daily.kills;
     case "dbosses": return s.daily.bosses;
     case "dgold": return s.daily.gold;
+    case "wkills": return s.weekly?.kills ?? 0;
+    case "wbosses": return s.weekly?.bosses ?? 0;
+    case "wgold": return s.weekly?.gold ?? 0;
+    case "wcasts": return s.weekly?.casts ?? 0;
     default: return 0;
   }
 }
@@ -241,12 +273,15 @@ export function newGame(): GameState {
     hero: { classId: "mage", name: "Бродяга", level: 1, xp: 0, skillPoints: 1, gold: 100, gems: 10, potions: 2, hp: 95 },
     equip: { weapon: null, helm: null, amulet: null, armor: null, gloves: null, boots: null, ring1: null, ring2: null },
     inv: [], skills: {}, passives: {},
-    battle: { zone: 0, wave: 1, enemy: null, heroT: 0, enemyT: 0, dotDps: 0, dotT: 0, cds: {}, fx: [], log: [], paused: false },
+    battle: { zone: 0, wave: 1, enemy: null, heroT: 0, enemyT: 0, dotDps: 0, dotT: 0, cds: {}, fx: [], log: [], paused: false, respawnT: 0 },
     zones: 1, bossDone: ZONES.map(() => false),
     totals: { kills: 0, bosses: 0, crits: 0, goldEarned: 0, dmgDealt: 0, items: 0, legendaries: 0, maxWave: 0, deaths: 0, casts: 0, potions: 0, events: 0, questsDone: 0 },
     achClaimed: [], questsClaimed: [], buffs: [], toasts: [],
     modal: { t: "class" },
     daily: { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] },
+    weekly: emptyWeekly(),
+    vip: 0,
+    slotLevel: { weapon: 0, helm: 0, amulet: 0, armor: 0, gloves: 0, boots: 0, ring1: 0, ring2: 0 },
     shopBuys: {}, lastSeen: Date.now(), uidSeq: 1, fxSeq: 1, toastSeq: 1,
   };
 }
@@ -274,7 +309,7 @@ export function reducer(s: GameState, a: Action): GameState {
       const st = { ...s, battle: { ...s.battle, cds: { ...s.battle.cds }, fx: [...s.battle.fx], log: [...s.battle.log] } };
       st.battle.zone = a.zone;
       st.battle.wave = 1;
-      st.battle.heroT = 0; st.battle.enemyT = 0; st.battle.dotT = 0; st.battle.paused = false;
+      st.battle.heroT = 0; st.battle.enemyT = 0; st.battle.dotT = 0; st.battle.paused = false; st.battle.respawnT = 0;
       st.battle.enemy = spawnEnemy(a.zone, 1);
       pushLog(st, `Вы вошли в «${ZONES[a.zone].name}»`);
       return st;
@@ -283,12 +318,13 @@ export function reducer(s: GameState, a: Action): GameState {
     case "CAST": {
       const def = SKILLS.find(k => k.id === a.id);
       if (!def || def.classId !== s.hero.classId) return s;
-      const st = { ...s, battle: { ...s.battle, cds: { ...s.battle.cds }, fx: [...s.battle.fx], log: [...s.battle.log] }, totals: { ...s.totals } };
+      const st = { ...s, battle: { ...s.battle, cds: { ...s.battle.cds }, fx: [...s.battle.fx], log: [...s.battle.log] }, totals: { ...s.totals }, weekly: { ...s.weekly, claimed: [...s.weekly.claimed] } };
       if (s.hero.level < def.unlockLevel) { toast(st, `${def.name}: откроется на ${def.unlockLevel} уровне`, "warn"); return st; }
       if (!st.battle.enemy || st.battle.paused) return s;
       if ((st.battle.cds[a.id] || 0) > 0) return s;
       st.battle.cds[a.id] = def.cd;
       st.totals.casts += 1;
+      st.weekly.casts += 1;
       const stats = getStats(s);
       const lvl = s.skills[a.id] || 1;
       const hits = def.hits(lvl);
@@ -440,13 +476,38 @@ export function reducer(s: GameState, a: Action): GameState {
 
     case "CHOOSE_EVENT": return chooseEvent(s, a.idx);
 
-    case "REVIVE": {
-      const st = { ...s, hero: { ...s.hero }, battle: { ...s.battle, log: [...s.battle.log] }, modal: null };
-      st.hero.hp = Math.round(getStats(st).maxHp * 0.6);
-      st.battle.paused = false;
-      st.battle.enemyT = 0;
-      st.battle.heroT = 0;
-      pushLog(st, "Вы воскресли. Слегка помятый, но злой");
+    case "CLAIM_WEEKLY": {
+      const def = WEEKLIES.find(q => q.id === a.id);
+      if (!def || s.weekly.claimed.includes(a.id)) return s;
+      if (getMetric(s, def.metric) < def.target) return s;
+      const st = { ...s, hero: { ...s.hero }, weekly: { ...s.weekly, claimed: [...s.weekly.claimed, a.id] } };
+      if (def.reward.gold) st.hero.gold += def.reward.gold;
+      if (def.reward.gems) st.hero.gems += def.reward.gems;
+      toast(st, `Еженедельник получен: «${def.title}»`, "gem");
+      return st;
+    }
+
+    case "UPGRADE_SLOT": {
+      const lvl = s.slotLevel[a.slot] || 0;
+      const st = { ...s, hero: { ...s.hero }, slotLevel: { ...s.slotLevel } };
+      if (lvl >= SLOT_UP_MAX) { toast(st, "Заточка на пределе", "warn"); return st; }
+      const ilvl = s.battle.zone * 12 + s.battle.wave;
+      const cost = slotUpCost(lvl, ilvl);
+      if (s.hero.gold < cost) { toast(st, "Не хватает золота на точильный камень", "warn"); return st; }
+      st.hero.gold -= cost;
+      st.slotLevel[a.slot] = lvl + 1;
+      toast(st, `Заточка слота: +${lvl + 1} (${SLOT_UP_BONUS * (lvl + 1)}% к статам)`, "gem");
+      return st;
+    }
+
+    case "BUY_VIP": {
+      if (s.vip >= VIP_LEVELS.length) return s;
+      const def = VIP_LEVELS[s.vip];
+      const st = { ...s, hero: { ...s.hero } };
+      if (s.hero.gems < def.cost) { toast(st, "Не хватает кристаллов на VIP", "warn"); return st; }
+      st.hero.gems -= def.cost;
+      st.vip = s.vip + 1;
+      toast(st, `VIP «${def.name}» активирован!`, "gem");
       return st;
     }
 
@@ -463,14 +524,17 @@ export function reducer(s: GameState, a: Action): GameState {
 /* =============== tick =============== */
 function tick(s: GameState, dt: number): GameState {
   if (!s.battle.enemy && !s.battle.fx.length && !s.buffs.length) {
-    // still need daily rollover
-    if (s.daily.date !== todayStr()) return { ...s, daily: { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] } };
+    // даже без боя нужны сбросы дня/недели
+    const daily = s.daily.date !== todayStr() ? { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] as string[] } : s.daily;
+    const weekly = s.weekly?.week !== weekKey() ? emptyWeekly() : s.weekly;
+    if (daily !== s.daily || weekly !== s.weekly) return { ...s, daily, weekly };
     return s;
   }
   const st: GameState = {
     ...s,
     hero: { ...s.hero },
     totals: { ...s.totals },
+    weekly: { ...s.weekly, claimed: [...s.weekly.claimed] },
     buffs: s.buffs.map(b => ({ ...b })),
     battle: { ...s.battle, cds: { ...s.battle.cds }, fx: s.battle.fx.map(f => ({ ...f })), log: [...s.battle.log] },
   };
@@ -486,6 +550,20 @@ function tick(s: GameState, dt: number): GameState {
   }
   for (const k of Object.keys(B.cds)) if (B.cds[k] > 0) B.cds[k] = Math.max(0, B.cds[k] - dt);
   if (st.daily.date !== todayStr()) st.daily = { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] };
+  if (st.weekly.week !== weekKey()) st.weekly = emptyWeekly();
+
+  // автовоскрешение — без модалок и кликов
+  if (B.paused && B.respawnT > 0) {
+    B.respawnT -= dt;
+    if (B.respawnT <= 0) {
+      B.respawnT = 0;
+      B.paused = false;
+      B.enemyT = 0;
+      B.heroT = 0;
+      st.hero.hp = Math.round(getStats(st).maxHp * 0.6);
+      pushLog(st, "Автовоскрешение! Помятый, но злой — снова в строю");
+    }
+  }
 
   if (!B.enemy || B.paused) return st;
 
@@ -593,8 +671,16 @@ export function loadGame(): GameState {
     return newGame();
   }
   s.toasts = [];
-  s.battle = { ...s.battle, fx: [] };
+  s.battle = { ...s.battle, fx: [], respawnT: s.battle.respawnT ?? 0 };
   if (s.daily?.date !== todayStr()) s.daily = { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] };
+  // миграция со старых сейвов: новые поля
+  if (s.vip == null) s.vip = 0;
+  if (!s.slotLevel) s.slotLevel = { weapon: 0, helm: 0, amulet: 0, armor: 0, gloves: 0, boots: 0, ring1: 0, ring2: 0 };
+  for (const sl of SLOTS) if (s.slotLevel[sl] == null) s.slotLevel[sl] = 0;
+  if (!s.weekly || s.weekly.week !== weekKey()) s.weekly = emptyWeekly();
+  // если герой застрял мёртвым в старом сейве — сразу воскрешаем
+  if (s.hero.hp <= 0) s.hero = { ...s.hero, hp: Math.round(getStats(s).maxHp * 0.6) };
+  if (s.battle.paused && s.battle.respawnT <= 0 && s.battle.enemy) s.battle.paused = false;
 
   const elapsed = (Date.now() - (s.lastSeen || Date.now())) / 1000;
   if (elapsed > 90 && s.battle.enemy && !s.battle.paused) {

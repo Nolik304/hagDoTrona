@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { GameProvider, useGame } from "./game/useGame";
 import { fmt, xpNeed } from "./game/logic";
-import { CLASSES } from "./game/data";
+import { CLASSES, VIP_LEVELS } from "./game/data";
 import { Icon } from "./ui/bits";
 import { BattleScreen } from "./ui/BattleScreen";
 import { HeroTab, InventoryTab } from "./ui/HeroScreens";
@@ -26,9 +26,22 @@ function HUD() {
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <span className="font-display text-[13px] text-fog truncate">{s.hero.name}</span>
-            <span className="text-[9px] text-dim tabular-nums">{fmt(s.hero.xp)}/{fmt(xpNeed(s.hero.level))} XP</span>
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="font-display text-[13px] text-fog truncate flex items-center gap-1.5">
+              {s.hero.name}
+              {s.vip > 0 && (
+                <span className="text-[8px] font-display px-1 py-px rounded border leading-none flex items-center gap-0.5"
+                  style={{
+                    color: VIP_LEVELS[s.vip - 1].color,
+                    borderColor: VIP_LEVELS[s.vip - 1].color + "66",
+                    background: VIP_LEVELS[s.vip - 1].color + "1a",
+                    boxShadow: `0 0 8px ${VIP_LEVELS[s.vip - 1].color}33`,
+                  }}>
+                  <Icon n="crown" className="w-2.5 h-2.5" />VIP {s.vip}
+                </span>
+              )}
+            </span>
+            <span className="text-[9px] text-dim tabular-nums shrink-0">{fmt(s.hero.xp)}/{fmt(xpNeed(s.hero.level))} XP</span>
           </div>
           <div className="relative h-1.5 mt-1 rounded-full bg-black/50 overflow-hidden">
             <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#3fd0b6] to-[#7ee8d6] transition-[width] duration-300"

@@ -255,6 +255,12 @@ export const DAILIES: QuestDef[] = [
   { id: "d3", title: "Золотая лихорадка", desc: "Заработай 2000 золота сегодня", metric: "dgold", target: 2000, reward: { gems: 3 }, flavor: "" },
 ];
 
+export const WEEKLIES: QuestDef[] = [
+  { id: "w1", title: "Неделя зачистки", desc: "Победи 500 врагов за неделю", metric: "wkills", target: 500, reward: { gold: 1500, gems: 15 }, flavor: "Гильдия объявила тотальную зачистку. Слизни создают профсоюз." },
+  { id: "w2", title: "Гроза главарей", desc: "Победи 5 боссов за неделю", metric: "wbosses", target: 5, reward: { gems: 30 }, flavor: "Пять голов — пять наград. Боссы скидываются на адвоката." },
+  { id: "w3", title: "Скиллодром", desc: "Примени навыки 100 раз за неделю", metric: "wcasts", target: 100, reward: { gold: 1000, gems: 10 }, flavor: "Кнопки стёрлись до дыр. Это считается за кардио." },
+];
+
 /* ================= ACHIEVEMENTS ================= */
 export const ACHS: QuestDef[] = [
   { id: "a1", title: "Зачистка", desc: "100 побед", metric: "kills", target: 100, reward: { gems: 5 }, flavor: "" },
@@ -324,3 +330,46 @@ export const SHOP: ShopDef[] = [
 ];
 export const shopCost = (def: ShopDef, buys: number) =>
   def.kind === "box" ? Math.round(def.cost * Math.pow(1.22, buys)) : def.cost;
+
+/* ================= VIP ================= */
+export interface VipDef {
+  name: string; color: string; cost: number;
+  goldPct: number; xpPct: number; luck: number; dmgPct: number; hpPct: number; offlinePct: number;
+  respawn: number; // секунды до автовоскрешения
+  perks: string[];
+}
+export const VIP_LEVELS: VipDef[] = [
+  {
+    name: "Бронза", color: "#cd7f32", cost: 150,
+    goldPct: 10, xpPct: 5, luck: 0, dmgPct: 0, hpPct: 0, offlinePct: 0, respawn: 2.5,
+    perks: ["+10% золото", "+5% опыт", "Воскрешение за 2.5 с"],
+  },
+  {
+    name: "Серебро", color: "#c9d4de", cost: 400,
+    goldPct: 18, xpPct: 10, luck: 10, dmgPct: 0, hpPct: 0, offlinePct: 12, respawn: 2,
+    perks: ["+18% золото", "+10% опыт", "+10 удача", "+12% офлайн-доход", "Воскрешение за 2 с"],
+  },
+  {
+    name: "Золото", color: "#f0b429", cost: 900,
+    goldPct: 28, xpPct: 15, luck: 18, dmgPct: 10, hpPct: 10, offlinePct: 25, respawn: 1.5,
+    perks: ["+28% золото", "+15% опыт", "+18 удача", "+10% урон", "+10% HP", "Воскрешение за 1.5 с"],
+  },
+  {
+    name: "Платина", color: "#9fd8e8", cost: 2000,
+    goldPct: 40, xpPct: 22, luck: 28, dmgPct: 18, hpPct: 15, offlinePct: 40, respawn: 1,
+    perks: ["+40% золото", "+22% опыт", "+28 удача", "+18% урон", "+15% HP", "Воскрешение за 1 с"],
+  },
+  {
+    name: "Бездна", color: "#c084fc", cost: 4500,
+    goldPct: 60, xpPct: 30, luck: 40, dmgPct: 30, hpPct: 25, offlinePct: 60, respawn: 0.5,
+    perks: ["+60% золото", "+30% опыт", "+40 удача", "+30% урон", "+25% HP", "Воскрешение за 0.5 с"],
+  },
+];
+
+/* ================= ЗАТОЧКА СЛОТОВ ================= */
+// Бонус заточки: +10% ко всем статам предмета в слоте за каждый уровень.
+// Привязана к слоту: сменил шмотку — бонус остался.
+export const SLOT_UP_BONUS = 10; // % за уровень
+export const SLOT_UP_MAX = 25;
+export const slotUpCost = (lvl: number, ilvl: number) =>
+  Math.round((80 + ilvl * 22) * Math.pow(1.6, lvl));

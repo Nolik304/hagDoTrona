@@ -71,6 +71,7 @@ export interface BattleS {
   fx: Fx[];
   log: string[];
   paused: boolean;
+  respawnT: number; // автовоскрешение: сек до возрождения (0 = не мёртв)
 }
 
 export interface TotalsS {
@@ -97,9 +98,17 @@ export interface DailyS {
   claimed: string[];
 }
 
+export interface WeeklyS {
+  week: string;
+  kills: number;
+  bosses: number;
+  gold: number;
+  casts: number;
+  claimed: string[];
+}
+
 export type Modal =
   | { t: "class" }
-  | { t: "death"; lost: number }
   | { t: "offline"; gold: number; xp: number; sec: number }
   | { t: "event"; id: string }
   | { t: "levelup"; level: number };
@@ -123,6 +132,9 @@ export interface GameState {
   toasts: Toast[];
   modal: Modal | null;
   daily: DailyS;
+  weekly: WeeklyS;
+  vip: number; // 0..5
+  slotLevel: Record<Slot, number>; // заточка слотов (привязана к слоту, не к предмету)
   shopBuys: Record<string, number>;
   lastSeen: number;
   uidSeq: number;
@@ -161,9 +173,11 @@ export type Action =
   | { type: "LEVEL_PASSIVE"; id: string }
   | { type: "CLAIM_QUEST"; id: string }
   | { type: "CLAIM_DAILY"; id: string }
+  | { type: "CLAIM_WEEKLY"; id: string }
   | { type: "CLAIM_ACH"; id: string }
   | { type: "CHOOSE_EVENT"; idx: number }
-  | { type: "REVIVE" }
+  | { type: "UPGRADE_SLOT"; slot: Slot }
+  | { type: "BUY_VIP" }
   | { type: "CLOSE_MODAL" }
   | { type: "DISMISS_TOAST"; id: number }
   | { type: "RESET" };

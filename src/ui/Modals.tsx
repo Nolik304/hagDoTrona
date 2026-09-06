@@ -63,27 +63,6 @@ function ClassModal() {
   );
 }
 
-function DeathModal({ lost }: { lost: number }) {
-  const { d } = useGame();
-  return (
-    <Shell>
-      <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-blood/15 border border-blood/40 grid place-items-center text-blood">
-          <Icon n="skull" className="w-9 h-9" />
-        </div>
-        <h2 className="font-display text-2xl text-blood text-outline mb-1">ВЫ ПАЛИ</h2>
-        <p className="text-dim text-xs mb-1">Гоблины уже примеряют ваши ботинки и делят золото.</p>
-        {lost > 0 && <p className="text-gold text-sm font-bold mb-4">Потеряно {fmt(lost)} золота (20%)</p>}
-        {lost === 0 && <p className="text-dim text-xs mb-4">Хоть золото не потеряли — уже победа.</p>}
-        <button onClick={() => d({ type: "REVIVE" })} className="btn btn-gold w-full py-3.5 text-[15px]">
-          ВОССТАТЬ ИЗ МЁРТВЫХ
-        </button>
-        <p className="text-[10px] text-dim/70 mt-2">Бесплатно. Бездна щедрая, но только в этот раз.</p>
-      </div>
-    </Shell>
-  );
-}
-
 function OfflineModal({ gold, xp, sec }: { gold: number; xp: number; sec: number }) {
   const { d } = useGame();
   return (
@@ -167,7 +146,6 @@ export function Modals() {
   const m = s.modal;
   if (!m) return null;
   if (m.t === "class") return <ClassModal />;
-  if (m.t === "death") return <DeathModal lost={m.lost} />;
   if (m.t === "offline") return <OfflineModal gold={m.gold} xp={m.xp} sec={m.sec} />;
   if (m.t === "event") return <EventModal id={m.id} />;
   if (m.t === "levelup") return <LevelUpModal level={m.level} />;

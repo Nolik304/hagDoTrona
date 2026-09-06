@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useGame } from "../game/useGame";
-import { QUESTS, DAILIES, ACHS, SHOP, RARITY, shopCost, type QuestDef } from "../game/data";
+import { QUESTS, DAILIES, WEEKLIES, ACHS, SHOP, RARITY, shopCost, VIP_LEVELS, type QuestDef } from "../game/data";
 import { fmt, getMetric, saveGame } from "../game/logic";
 import { Bar, Icon, SectionTitle } from "./bits";
 
@@ -66,6 +66,63 @@ function QuestsSeg() {
           ))}
         </div>
       </div>
+      <div className="panel p-3">
+        <SectionTitle icon="crown" right={<span className="text-[10px] text-dim">сброс в понедельник</span>}>ЕЖЕНЕДЕЛЬНИК</SectionTitle>
+        <div className="flex flex-col gap-2">
+          {WEEKLIES.map(q => (
+            <QuestRow key={q.id} def={q} done={s.weekly.claimed.includes(q.id)} progress={getMetric(s, q.metric)}
+              onClaim={() => d({ type: "CLAIM_WEEKLY", id: q.id })} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VipPanel() {
+  const { s, d } = useGame();
+  const cur = s.vip > 0 ? VIP_LEVELS[s.vip - 1] : null;
+  const next = s.vip < VIP_LEVELS.length ? VIP_LEVELS[s.vip] : null;
+  return (
+    <div className="panel p-3 relative overflow-hidden">
+      <div className="absolute -top-14 -right-10 w-36 h-36 rounded-full blur-2xl pointer-events-none"
+        style={{ background: (cur?.color ?? "#f0b429") + "2e" }} />
+      <SectionTitle icon="crown" right={cur
+        ? <span className="text-[10px] font-display" style={{ color: cur.color }}>VIP {s.vip} · {cur.name.toUpperCase()}</span>
+        : <span className="text-[10px] text-dim">не активирован</span>}>
+        ПРИВИЛЕГИИ
+      </SectionTitle>
+
+      {cur && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {cur.perks.map(p => (
+            <span key={p} className="text-[9px] font-bold px-2 py-1 rounded-md border"
+              style={{ color: cur.color, borderColor: cur.color + "55", background: cur.color + "12" }}>
+              {p}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {next ? (
+        <div className="bg-abyss/60 border rounded-xl p-3" style={{ borderColor: next.color + "44" }}>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="font-display text-[13px]" style={{ color: next.color }}>VIP {s.vip + 1} · {next.name.toUpperCase()}</span>
+            <span className="ml-auto text-[9px] text-dim">воскрешение за {next.respawn} с</span>
+          </div>
+          <div className="flex flex-wrap gap-1 mb-3">
+            {next.perks.map(p => (
+              <span key={p} className="text-[9px] px-1.5 py-0.5 rounded bg-panel2 text-fog/85 border border-line/60">{p}</span>
+            ))}
+          </div>
+          <button disabled={s.hero.gems < next.cost} onClick={() => d({ type: "BUY_VIP" })}
+            className="btn btn-gold w-full py-2.5 text-[13px] flex items-center justify-center gap-1.5">
+            <Icon n="gem" className="w-4 h-4" filled />АКТИВИРОВАТЬ ЗА {fmt(next.cost)}
+          </button>
+        </div>
+      ) : (
+        <div className="text-center text-[11px] text-dim py-2">Максимальный VIP. Бездна уважает таких клиентов.</div>
+      )}
     </div>
   );
 }
@@ -73,7 +130,9 @@ function QuestsSeg() {
 function ShopSeg() {
   const { s, d } = useGame();
   return (
-    <div className="panel p-3">
+    <div className="flex flex-col gap-3">
+      <VipPanel />
+      <div className="panel p-3">
       <SectionTitle icon="goblin" right={<span className="text-[10px] text-dim italic">«скидки не будет»</span>}>ЛАВКА ГОБЛИНА</SectionTitle>
       <div className="grid grid-cols-2 gap-2.5">
         {SHOP.map(def => {
@@ -102,6 +161,7 @@ function ShopSeg() {
       <p className="text-[10px] text-dim/70 text-center mt-3">
         Сундуки дорожают с каждой покупкой. Гоблин называет это «динамическим ценообразованием».
       </p>
+      </div>
     </div>
   );
 }
@@ -143,9 +203,11 @@ function OptSeg() {
   return (
     <div className="panel p-3 flex flex-col gap-3">
       <SectionTitle icon="gear">ОПЦИИ</SectionTitle>
-      <div className="bg-abyss/60 border border-line/60 rounded-xl p-3 text-[11px] text-dim leading-relaxed">
-        Прогресс сохраняется автоматически каждые 4 секунды и при сворачивании приложения.
-        Пока вы офлайн, наёмники продолжают фармить — до 8 часов.
+      <div className="bg-abyss/60 border border-line/60 rounded-xl p-3 text-[11px] text-dim leading-relaxed space-y-1">
+        <p>· Прогресс сохраняется каждые 4 секунды и при сворачивании приложения.</p>
+        <p>· Пока вы офлайн, наёмники продолжают фармить — до 8 часов.</p>
+        <p>· Смерть не страшна: <b className="text-fog">автовоскрешение</b> через 3 сек (−20% золота). VIP ускоряет до 0.5 сек.</p>
+        <p>· Заточка слотов привязана к слоту — новая шмотка наследует бонус.</p>
       </div>
       <button onClick={() => { saveGame(s); setSaved(true); setTimeout(() => setSaved(false), 1500); }}
         className="btn btn-arc w-full py-3 text-[13px]">{saved ? "СОХРАНЕНО!" : "СОХРАНИТЬ СЕЙЧАС"}</button>

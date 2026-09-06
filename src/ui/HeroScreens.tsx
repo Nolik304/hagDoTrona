@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useGame } from "../game/useGame";
-import { CLASSES, RARITY, INV_CAP } from "../game/data";
+import { CLASSES, RARITY, INV_CAP, SLOT_UP_BONUS, SLOT_UP_MAX, slotUpCost, VIP_LEVELS } from "../game/data";
 import { fmt, SLOTS } from "../game/logic";
 import { Icon, ItemRow, slotIcon, SectionTitle, rarColor } from "./bits";
 import { HeroArt } from "./art";
@@ -33,9 +33,59 @@ function SlotBox({ slot }: { slot: Slot }) {
       }}>
       <Icon n={slotIcon(slot, s.hero.classId)} className="w-6 h-6" />
       {it && <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full" style={{ background: c, boxShadow: `0 0 6px ${c}` }} />}
+      {(s.slotLevel[slot] || 0) > 0 && (
+        <span className="absolute -top-1.5 -left-1.5 text-[8px] font-display px-1 py-px rounded-md bg-gold text-ink border border-ink leading-none"
+          style={{ boxShadow: "0 0 8px rgba(240,180,41,0.55)" }}>
+          +{s.slotLevel[slot]}
+        </span>
+      )}
       <span className="absolute -bottom-0.5 inset-x-0 text-center text-[8px] text-dim leading-none">{arm && it ? "снять?" : SLOT_LABEL[slot]}</span>
       <span className="sr-only">{it?.name ?? SLOT_LABEL[slot]}</span>
     </button>
+  );
+}
+
+/** Заточка слотов: бонус живёт в слоте, а не в предмете */
+function SharpenPanel() {
+  const { s, d } = useGame();
+  const ilvl = s.battle.zone * 12 + s.battle.wave;
+  return (
+    <div className="panel p-3">
+      <SectionTitle icon="bolt" right={<span className="text-[9px] text-dim">+{SLOT_UP_BONUS}% к статам слота за ур.</span>}>
+        ЗАТОЧКА СЛОТОВ
+      </SectionTitle>
+      <p className="text-[10px] text-dim/80 mb-2 leading-snug">
+        Бонус привязан к <b className="text-fog">слоту</b>, а не к шмотке: надели новый предмет — заточка осталась. Работает только когда слот занят.
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {SLOTS.map(slot => {
+          const lvl = s.slotLevel[slot] || 0;
+          const it = s.equip[slot];
+          const max = lvl >= SLOT_UP_MAX;
+          const cost = slotUpCost(lvl, ilvl);
+          const afford = s.hero.gold >= cost;
+          return (
+            <div key={slot} className="bg-abyss/60 border border-line/60 rounded-lg px-2.5 py-1.5 flex items-center gap-2">
+              <span className="text-gold/80"><Icon n={slotIcon(slot, s.hero.classId)} className="w-4 h-4" /></span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] text-fog font-semibold flex items-center gap-1.5">
+                  {SLOT_LABEL[slot]}
+                  {lvl > 0 && <span className="text-[9px] font-display text-gold">+{lvl}</span>}
+                </div>
+                <div className="text-[9px] text-dim truncate">
+                  {it ? <>«{it.name}» · бонус +{SLOT_UP_BONUS * lvl}%</> : "слот пуст — заточка ждёт предмет"}
+                </div>
+              </div>
+              <button disabled={max || !afford} onClick={() => d({ type: "UPGRADE_SLOT", slot })}
+                className="btn btn-dark px-2.5 py-1.5 text-[10px] shrink-0 flex items-center gap-1"
+                style={afford && !max ? { borderColor: "#f0b42955" } : undefined}>
+                {max ? "MAX" : <><Icon n="coin" className="w-3 h-3 text-gold" filled />{fmt(cost)}</>}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -65,7 +115,15 @@ export function HeroTab() {
             <Icon n={s.hero.classId === "mage" ? "staff" : "bow"} className="w-5 h-5" />
           </div>
           <div className="flex-1">
-            <div className="font-display text-[15px] text-fog leading-tight">{s.hero.name}</div>
+            <div className="font-display text-[15px] text-fog leading-tight flex items-center gap-1.5">
+              {s.hero.name}
+              {s.vip > 0 && (
+                <span className="text-[8px] font-display px-1 py-px rounded border leading-none"
+                  style={{ color: VIP_LEVELS[s.vip - 1].color, borderColor: VIP_LEVELS[s.vip - 1].color + "66", background: VIP_LEVELS[s.vip - 1].color + "1a" }}>
+                  VIP {s.vip}
+                </span>
+              )}
+            </div>
             <div className="text-[10px] text-dim">{cls.name} · «{cls.title}» · {s.hero.level} уровень</div>
           </div>
           <div className="text-right">
@@ -95,6 +153,8 @@ export function HeroTab() {
       <div className="flex justify-center gap-2">
         {(["ring2", "boots"] as Slot[]).map(sl => <SlotBox key={sl} slot={sl} />)}
       </div>
+
+      <SharpenPanel />
 
       {buffList.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

@@ -122,10 +122,30 @@ export function BattleScreen() {
         </div>
       </div>
 
+      {/* death / auto-revive banner */}
+      {B.paused && B.respawnT > 0 && (
+        <div className="anim-pop panel border-blood/50 px-3.5 py-3 flex items-center gap-3"
+          style={{ boxShadow: "0 0 22px rgba(229,72,77,0.25)", borderColor: "#e5484d88" }}>
+          <div className="w-10 h-10 shrink-0 rounded-full bg-blood/15 border border-blood/50 grid place-items-center text-blood">
+            <Icon n="skull" className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <div className="font-display text-[14px] text-blood tracking-wide">ВЫ ПАЛИ</div>
+            <div className="text-[10px] text-dim">−20% золота · совет: качните пассивки или спуститесь ниже</div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="font-display text-2xl text-fog tabular-nums leading-none">{Math.ceil(B.respawnT)}</div>
+            <div className="text-[8px] text-dim tracking-widest font-display">АВТОВОЗРОЖДЕНИЕ</div>
+          </div>
+        </div>
+      )}
+
       {/* battle log */}
-      <div key={B.log[0] ?? ""} className="anim-rise text-[11px] text-dim/90 px-1 h-4 truncate">
-        {B.log[0] ?? "Бой идёт своим чередом..."}
-      </div>
+      {!B.paused && (
+        <div key={B.log[0] ?? ""} className="anim-rise text-[11px] text-dim/90 px-1 h-4 truncate">
+          {B.log[0] ?? "Бой идёт своим чередом..."}
+        </div>
+      )}
 
       {/* skills */}
       <div className="grid grid-cols-4 gap-2">
