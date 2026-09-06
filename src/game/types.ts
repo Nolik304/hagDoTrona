@@ -5,7 +5,7 @@ export type Slot = Exclude<BaseSlot, "ring"> | "ring1" | "ring2";
 export type Rarity = 0 | 1 | 2 | 3 | 4 | 5; // 5 = «Бездна» (сет Портала)
 
 export type StatKey =
-  | "dmg" | "dmgPct" | "hp" | "armor" | "crit" | "critDmg"
+  | "dmg" | "dmgPct" | "hp" | "hpPct" | "armor" | "crit" | "critDmg"
   | "as" | "goldPct" | "xpPct" | "luck" | "regen";
 
 export interface Item {
@@ -17,6 +17,7 @@ export interface Item {
   stats: Partial<Record<StatKey, number>>;
   sell: number;
   abyss?: boolean; // предмет Сета Бездны
+  set?: string; // id сета (атлас)
 }
 
 export interface Enemy {
@@ -73,6 +74,7 @@ export interface BattleS {
   log: string[];
   paused: boolean;
   respawnT: number; // автовоскрешение: сек до возрождения (0 = не мёртв)
+  bossLocked: boolean; // босс отбил атаку — нужен ручной призыв
 }
 
 export interface TotalsS {
@@ -89,6 +91,8 @@ export interface TotalsS {
   potions: number;
   events: number;
   questsDone: number;
+  partyWins: number; // победы в пати-подземельях
+  setPieces: number; // добыто сетовых вещей
 }
 
 export interface DailyS {
@@ -97,6 +101,7 @@ export interface DailyS {
   bosses: number;
   gold: number;
   claimed: string[];
+  tickets: number; // билеты пати-подземелий (восполняются ежедневно)
 }
 
 export interface WeeklyS {
@@ -142,9 +147,33 @@ export interface DuelS {
   reward: number;
 }
 
+export interface PartyMate {
+  name: string;
+  classId: ClassId;
+  hp: number;
+  maxHp: number;
+  dps: number;
+  reviveT: number;
+}
+
+export interface PartyS {
+  tier: number;
+  bossKey: string;
+  bossName: string;
+  bossHp: number;
+  bossMaxHp: number;
+  bossDmg: number;
+  t: number; // оставшееся время
+  atkT: number;
+  mates: PartyMate[];
+  state: "fight" | "win" | "fail";
+  reward: { gold: number; gems: number; pathXp: number; setItem: string | null };
+}
+
 export interface RunS {
   active: boolean;
   kind: "exp" | "portal"; // экспедиция или Портал Бездны
+  depth: number; // глубина Портала (1 = Бездна I)
   wave: number; // 1..20
   enemy: Enemy | null;
   heroT: number;
@@ -194,6 +223,10 @@ export interface GameState {
   blood: number; // кровь демона — ключ к Порталу Бездны
   godstone: number | null; // Камень Бога: null — не пробуждён, иначе уровень 0..∞
   duel: DuelS; // дуэли с MMR
+  portalDepth: number; // открытая глубина Портала (1 = Бездна I)
+  path: string | null; // выбранный путь Атласа
+  pathXp: number; // опыт пути
+  party: PartyS | null; // пати-подземелье
   shopBuys: Record<string, number>;
   lastSeen: number;
   uidSeq: number;
@@ -237,7 +270,7 @@ export type Action =
   | { type: "CHOOSE_EVENT"; idx: number }
   | { type: "UPGRADE_SLOT"; slot: Slot }
   | { type: "BUY_VIP" }
-  | { type: "START_RUN"; kind: "exp" | "portal" }
+  | { type: "START_RUN"; kind: "exp" | "portal"; depth?: number }
   | { type: "ABANDON_RUN" }
   | { type: "RUN_CAST"; id: string }
   | { type: "RUN_USE_POTION" }
@@ -249,6 +282,10 @@ export type Action =
   | { type: "DUEL_SEARCH" }
   | { type: "DUEL_CAST"; id: string }
   | { type: "DUEL_CLOSE" }
+  | { type: "SUMMON_BOSS" }
+  | { type: "CHOOSE_PATH"; id: string }
+  | { type: "PARTY_START"; tier: number }
+  | { type: "PARTY_CLOSE" }
   | { type: "CLOSE_MODAL" }
   | { type: "DISMISS_TOAST"; id: number }
   | { type: "RESET" };

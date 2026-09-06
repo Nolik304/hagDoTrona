@@ -3,8 +3,11 @@ import {
   genItem, INV_CAP, skillCost, shopCost, SHOP, VIP_LEVELS, SLOT_UP_BONUS, SLOT_UP_MAX, slotUpCost,
   RELICS, META, RUN_WAVES, RUN_BOSS_EVERY, shardReward,
   ABYSS_SET, ABYSS_SET_BONUS, GODSTONE, DUEL_NAMES, DUEL_TOKENS_START, DUEL_TOKENS_MAX,
+  SETS, SET_PIECE_NAMES, setPoolForTier, RARITY, SLOT_INFO,
+  PATHS, PATH_LEVEL_CAP, pathXpNeed, PATH_SWITCH_COST,
+  DUNGEONS, PARTY_TICKETS_DAILY, PARTY_TIME, MATE_NAMES,
 } from "./data";
-import type { Action, BaseSlot, ClassId, DuelFoe, DuelS, Enemy, GameState, Item, RunS, Slot, StatKey, Stats } from "./types";
+import type { Action, BaseSlot, ClassId, DuelFoe, DuelS, Enemy, GameState, Item, PartyS, RunS, Slot, StatKey, Stats } from "./types";
 
 export const SAVE_KEY = "bezdna-idle-save-v1";
 export const SLOTS: Slot[] = ["weapon", "helm", "amulet", "armor", "gloves", "boots", "ring1", "ring2"];
@@ -95,6 +98,54 @@ export function getStats(s: GameState): Stats {
     crit += 1.2 * L; asPct += 1.5 * L; luck += 2 * L; armor += 3 * L;
     critDmg += 3 * L; regen += 0.3 * L; offlinePct += 2 * L;
   }
+
+  // Сеты Атласа: бонусы за количество надетых вещей одного сета
+  const worn = equippedSetCounts(s);
+  for (const def of SETS) {
+    const count = worn[def.id] || 0;
+    if (count < 2) continue;
+    for (const b of def.bonuses) {
+      if (count < b.need) continue;
+      for (const [k, v] of Object.entries(b.mods)) {
+        const val = v ?? 0;
+        switch (k) {
+          case "dmgPct": dmgPct += val; break;
+          case "hpPct": hpPct += val; break;
+          case "crit": crit += val; break;
+          case "critDmg": critDmg += val; break;
+          case "as": asPct += val; break;
+          case "goldPct": goldPct += val; break;
+          case "xpPct": xpPct += val; break;
+          case "luck": luck += val; break;
+          case "armor": armor += val; break;
+          case "regen": regen += val; break;
+        }
+      }
+    }
+  }
+
+  // Путь Атласа: бонус за уровень пути
+  if (s.path) {
+    const pdef = PATHS.find(p => p.id === s.path);
+    const pl = pathLevel(s.pathXp);
+    if (pdef && pl > 0) {
+      for (const [k, v] of Object.entries(pdef.mods)) {
+        const val = (v ?? 0) * pl;
+        switch (k) {
+          case "dmgPct": dmgPct += val; break;
+          case "hpPct": hpPct += val; break;
+          case "crit": crit += val; break;
+          case "critDmg": critDmg += val; break;
+          case "as": asPct += val; break;
+          case "goldPct": goldPct += val; break;
+          case "xpPct": xpPct += val; break;
+          case "luck": luck += val; break;
+          case "armor": armor += val; break;
+          case "regen": regen += val; break;
+        }
+      }
+    }
+  }
   // мета-апгрейды Алтаря (постоянные)
   for (const m of META) {
     const r = s.meta?.[m.id] || 0;
@@ -119,14 +170,73 @@ export function getStats(s: GameState): Stats {
   return { dmg, dps, as, crit: Math.min(85, crit), critDmg, maxHp, armor, mit, goldPct, xpPct, luck: luck + luckBuff, regen, offline };
 }
 
+/* =============== атлас: пути и сеты =============== */
+export function pathLevel(xp: number): number {
+  let lvl = 0, need = pathXpNeed(1);
+  while (xp >= need && lvl < PATH_LEVEL_CAP) { xp -= need; lvl += 1; need = pathXpNeed(lvl + 1); }
+  return lvl;
+}
+export const pathXpInto = (xp: number): { lvl: number; cur: number; need: number } => {
+  let lvl = 0, need = pathXpNeed(1);
+  while (xp >= need && lvl < PATH_LEVEL_CAP) { xp -= need; lvl += 1; need = pathXpNeed(lvl + 1); }
+  return { lvl, cur: xp, need };
+};
+
+export function equippedSetCounts(s: GameState): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const slot of SLOTS) {
+    const it = s.equip[slot];
+    if (it?.set) out[it.set] = (out[it.set] || 0) + 1;
+  }
+  return out;
+}
+
+/** генерация сетовой вещи (сеты Атласа) */
+export function genSetItem(setId: string, ilvl: number, classId: ClassId, uid: number): Item {
+  const def = SETS.find(x => x.id === setId) ?? SETS[0];
+  const base = def.pieces[Math.floor(Math.random() * def.pieces.length)];
+  const pool = [...def.bias];
+  const stats: Partial<Record<StatKey, number>> = {};
+  const nStats = 3;
+  for (let i = 0; i < nStats && pool.length; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    const key = pool.splice(idx, 1)[0];
+    let v = (baseStat(key, ilvl)) * 3.4 * (0.85 + Math.random() * 0.3);
+    if (key === "dmg" && base === "weapon") v *= classId === "mage" ? 1.25 : 0.9;
+    stats[key] = key === "dmg" || key === "hp" ? Math.round(v) : Math.round(v * 10) / 10;
+  }
+  const name = `${def.name}: ${SET_PIECE_NAMES[base]}`;
+  const sell = Math.round(60 + ilvl * 3);
+  return { uid, base, name, rarity: 4, ilvl, stats, sell, set: def.id };
+}
+
+const baseStat = (k: StatKey, ilvl: number): number => {
+  switch (k) {
+    case "dmg": return 2 + ilvl * 0.85;
+    case "dmgPct": return 3 + ilvl * 0.12;
+    case "hp": return 9 + ilvl * 2.1;
+    case "hpPct": return 2;
+    case "armor": return 1.5 + ilvl * 0.45;
+    case "crit": return 2;
+    case "critDmg": return 7;
+    case "as": return 3;
+    case "goldPct": return 4;
+    case "xpPct": return 4;
+    case "luck": return 2.5;
+    case "regen": return 0.35;
+  }
+};
+
 /* =============== enemies =============== */
-export function spawnEnemy(zone: number, wave: number): Enemy {
+export function spawnEnemy(zone: number, wave: number, bossLocked = false): Enemy {
   const z = ZONES[zone];
-  const boss = wave % 10 === 0;
+  // если босс отбит, на его волне стоят усиленные стражи, пока его не призовут вручную
+  const boss = wave % 10 === 0 && !bossLocked;
   const key = boss ? z.boss : z.mobs[Math.floor(Math.random() * z.mobs.length)];
   const p = zone * 12 + wave;
-  let hp = (26 + zone * 14) * Math.pow(1.17, p) * (boss ? 7 : 1);
-  let dmg = (5 + zone * 3.2) * Math.pow(1.135, p) * (boss ? 1.8 : 1);
+  const guard = bossLocked && wave % 10 === 0 ? 2.2 : 1; // стражи на волне отбитого босса
+  let hp = (26 + zone * 14) * Math.pow(1.17, p) * (boss ? 7 : 1) * guard;
+  let dmg = (5 + zone * 3.2) * Math.pow(1.135, p) * (boss ? 1.8 : 1) * (guard > 1 ? 1.4 : 1);
   if (z.endless && wave > 10) {
     hp *= 1 + (wave - 10) * 0.22;
     dmg *= 1 + (wave - 10) * 0.12;
@@ -138,12 +248,12 @@ export function spawnEnemy(zone: number, wave: number): Enemy {
 }
 
 /* =============== РОГАЛИК: экспедиция и Портал Бездны =============== */
-export const newRun = (kind: "exp" | "portal" = "exp"): RunS => ({
-  active: false, kind, wave: 1, enemy: null, heroT: 0, enemyT: 0, hp: 0, maxHp: 0,
+export const newRun = (kind: "exp" | "portal" = "exp", depth = 1): RunS => ({
+  active: false, kind, depth, wave: 1, enemy: null, heroT: 0, enemyT: 0, hp: 0, maxHp: 0,
   cds: {}, relics: {}, bosses: 0, goldEarned: 0,
 });
 
-export function spawnRunEnemy(wave: number, kind: "exp" | "portal" = "exp"): Enemy {
+export function spawnRunEnemy(wave: number, kind: "exp" | "portal" = "exp", depth = 1): Enemy {
   const tier = kind === "portal"
     ? ZONES.length - 1 // Портал сразу кидает в тварей Бездны
     : Math.min(Math.floor((wave - 1) / RUN_BOSS_EVERY), ZONES.length - 2);
@@ -152,9 +262,12 @@ export function spawnRunEnemy(wave: number, kind: "exp" | "portal" = "exp"): Ene
   const key = boss ? z.boss : z.mobs[Math.floor(Math.random() * z.mobs.length)];
   const hpK = kind === "portal" ? 1.42 : 1.33;
   const dmgK = kind === "portal" ? 1.3 : 1.24;
-  const hp = 60 * Math.pow(hpK, wave) * (boss ? 5 : 1);
-  const dmg = 8 * Math.pow(dmgK, wave) * (boss ? 1.6 : 1);
-  const gold = Math.round((10 + wave * 3) * (boss ? 8 : 1) * (0.9 + Math.random() * 0.2) * (kind === "portal" ? 1.6 : 1));
+  // глубины Портала: Бездна I, II, III… каждая заметно злее
+  const depthHp = kind === "portal" ? Math.pow(2.1, depth - 1) : 1;
+  const depthDmg = kind === "portal" ? Math.pow(1.68, depth - 1) : 1;
+  const hp = 60 * Math.pow(hpK, wave) * (boss ? 5 : 1) * depthHp;
+  const dmg = 8 * Math.pow(dmgK, wave) * (boss ? 1.6 : 1) * depthDmg;
+  const gold = Math.round((10 + wave * 3) * (boss ? 8 : 1) * (0.9 + Math.random() * 0.2) * (kind === "portal" ? 1.6 * depth : 1));
   const r = Math.round(hp);
   return { key, name: MOBS[key]?.n ?? key, hp: r, maxHp: r, dmg, as: boss ? 0.55 : 0.9, boss, gold, xp: 0 };
 }
@@ -420,7 +533,7 @@ function runKill(st: GameState) {
 
   if (st.run.wave >= RUN_WAVES) { endRun(st, true); return; }
   st.run.wave += 1;
-  st.run.enemy = spawnRunEnemy(st.run.wave, st.run.kind);
+  st.run.enemy = spawnRunEnemy(st.run.wave, st.run.kind, st.run.depth);
   st.run.heroT = 0;
   st.run.enemyT = 0;
   if (wasBoss) {
@@ -453,13 +566,33 @@ function endRun(st: GameState, win: boolean, abandoned = false): GameState {
     shards = abandoned ? Math.round(shardReward(reached, st.run.bosses, false) / 2) : shardReward(reached, st.run.bosses, win);
     st.shards += shards;
   } else if (win && !abandoned) {
-    // победа в Портале: кристаллы + ещё одна вещь сета
-    st.hero.gems += 15;
+    // победа в Портале: кристаллы + вещь Сета Бездны + шанс вещи сета Атласа
+    const depth = st.run.depth;
+    st.hero.gems += 12 + depth * 3;
     st.uidSeq += 1;
-    const it = genAbyssItem(st.hero.level * 4 + reached * 2 + 8, st.uidSeq, st.hero.classId, reached);
+    const it = genAbyssItem(st.hero.level * 4 + reached * 2 + 8 + depth * 6, st.uidSeq, st.hero.classId, reached);
     st.totals.items += 1;
     if (st.inv.length < INV_CAP) { st.inv = [...st.inv, it]; toast(st, `Награда Портала: ${it.name}`, "loot"); }
     else { st.hero.gold += it.sell; st.totals.goldEarned += it.sell; }
+    // сет Атласа (шанс)
+    if (Math.random() < 0.5) {
+      const pool = setPoolForTier(depth);
+      if (pool.length && st.inv.length < INV_CAP) {
+        const sdef = pool[Math.floor(Math.random() * pool.length)];
+        st.uidSeq += 1;
+        const sit = genSetItem(sdef.id, st.hero.level * 3 + depth * 10, st.hero.classId, st.uidSeq);
+        st.inv = [...st.inv, sit];
+        st.totals.items += 1; st.totals.setPieces += 1;
+        toast(st, `Сет «${sdef.name}»: ${sit.name}`, "loot");
+      }
+    }
+    // открыть следующую глубину и новую пассивную зону
+    if (depth >= st.portalDepth) st.portalDepth = depth + 1;
+    const newZones = Math.min(ZONES.length, 5 + depth);
+    if (newZones > st.zones) {
+      st.zones = newZones;
+      toast(st, `Открыта зона: «${ZONES[newZones - 1].name}»`, "gem");
+    }
   }
   st.bestWave = Math.max(st.bestWave, reached);
   st.run = { ...st.run, active: false, enemy: null };
@@ -556,6 +689,7 @@ function killEnemy(st: GameState, stats: Stats) {
   pushLog(st, KILL_PHRASES[Math.floor(Math.random() * KILL_PHRASES.length)].replace("{e}", e.name));
 
   if (e.boss) {
+    st.battle.bossLocked = false; // босс повержен — блокировка снята
     if (!st.bossDone[st.battle.zone]) {
       st.bossDone = [...st.bossDone];
       st.bossDone[st.battle.zone] = true;
@@ -575,7 +709,7 @@ function killEnemy(st: GameState, stats: Stats) {
   st.battle.enemyT = 0;
   st.battle.dotT = 0;
   st.battle.dotDps = 0;
-  st.battle.enemy = spawnEnemy(st.battle.zone, st.battle.wave);
+  st.battle.enemy = spawnEnemy(st.battle.zone, st.battle.wave, st.battle.bossLocked);
 }
 
 function enemyHit(st: GameState, stats: Stats) {
@@ -587,12 +721,15 @@ function enemyHit(st: GameState, stats: Stats) {
   if (st.hero.hp <= 0) {
     st.hero.hp = 0;
     st.battle.paused = true;
-    const lost = Math.floor(st.hero.gold * 0.2);
-    st.hero.gold -= lost;
     st.totals.deaths += 1;
-    // автовоскрешение: никакой вечной модалки, таймер тикает в TICK
+    // если повалил босс — он «отбит»: дальше фарм волн, босса призывать вручную
+    if (e.boss && !st.battle.bossLocked) {
+      st.battle.bossLocked = true;
+      pushLog(st, "Босс отбил атаку! Призовите его снова, когда будете готовы");
+    }
+    // автовоскрешение: никакой вечной модалки, таймер тикает в TICK. Золото не отнимается!
     st.battle.respawnT = respawnTime(st.vip);
-    pushLog(st, `Вы пали (−${fmt(lost)} зол.). Автовоскрешение через ${st.battle.respawnT} с...`);
+    pushLog(st, `Вы пали. Автовоскрешение через ${st.battle.respawnT} с...`);
   }
 }
 
@@ -633,15 +770,16 @@ export function newGame(): GameState {
     hero: { classId: "mage", name: "Бродяга", level: 1, xp: 0, skillPoints: 1, gold: 100, gems: 10, potions: 2, hp: 95 },
     equip: { weapon: null, helm: null, amulet: null, armor: null, gloves: null, boots: null, ring1: null, ring2: null },
     inv: [], skills: {}, passives: {},
-    battle: { zone: 0, wave: 1, enemy: null, heroT: 0, enemyT: 0, dotDps: 0, dotT: 0, cds: {}, fx: [], log: [], paused: false, respawnT: 0 },
+    battle: { zone: 0, wave: 1, enemy: null, heroT: 0, enemyT: 0, dotDps: 0, dotT: 0, cds: {}, fx: [], log: [], paused: false, respawnT: 0, bossLocked: false },
     zones: 1, bossDone: ZONES.map(() => false),
-    totals: { kills: 0, bosses: 0, crits: 0, goldEarned: 0, dmgDealt: 0, items: 0, legendaries: 0, maxWave: 0, deaths: 0, casts: 0, potions: 0, events: 0, questsDone: 0 },
+    totals: { kills: 0, bosses: 0, crits: 0, goldEarned: 0, dmgDealt: 0, items: 0, legendaries: 0, maxWave: 0, deaths: 0, casts: 0, potions: 0, events: 0, questsDone: 0, partyWins: 0, setPieces: 0 },
     achClaimed: [], questsClaimed: [], buffs: [], toasts: [],
     modal: { t: "class" },
-    daily: { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] },
+    daily: { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [], tickets: PARTY_TICKETS_DAILY },
     weekly: emptyWeekly(),
     vip: 0,
     slotLevel: { weapon: 0, helm: 0, amulet: 0, armor: 0, gloves: 0, boots: 0, ring1: 0, ring2: 0 },
+    portalDepth: 1, path: null, pathXp: 0, party: null,
     run: newRun(),
     shards: 0,
     meta: {},
@@ -889,8 +1027,9 @@ export function reducer(s: GameState, a: Action): GameState {
         toast(st0, "Нужна Кровь Демона — выбивай боссов в Экспедиции", "warn");
         return st0;
       }
+      const depth = kind === "portal" ? Math.max(1, a.depth || 1) : 1;
       const st: GameState = {
-        ...s, hero: { ...s.hero }, run: { ...newRun(kind), relics: {} },
+        ...s, hero: { ...s.hero }, run: { ...newRun(kind, depth), relics: {} },
         battle: { ...s.battle, paused: true, log: [...s.battle.log] },
       };
       if (kind === "portal") st.blood -= 1;
@@ -898,7 +1037,7 @@ export function reducer(s: GameState, a: Action): GameState {
       st.run.maxHp = rs.maxHp;
       st.run.hp = rs.maxHp;
       st.run.active = true;
-      st.run.enemy = spawnRunEnemy(1, kind);
+      st.run.enemy = spawnRunEnemy(1, kind, depth);
       // мета «Фора»: стартовые дары
       const head = META.find(m => m.id === "headstart");
       const headRank = head ? s.meta?.[head.id] || 0 : 0;
@@ -1044,6 +1183,48 @@ export function reducer(s: GameState, a: Action): GameState {
       return st;
     }
 
+    case "SUMMON_BOSS": {
+      if (!s.battle.bossLocked) return s;
+      const st = { ...s, battle: { ...s.battle, bossLocked: false, log: [...s.battle.log] } };
+      st.battle.enemy = spawnEnemy(st.battle.zone, st.battle.wave, false);
+      pushLog(st, "Босс призван! Он недоволен, что его разбудили");
+      return st;
+    }
+
+    case "CHOOSE_PATH": {
+      const def = PATHS.find(p => p.id === a.id);
+      if (!def) return s;
+      const st = { ...s, hero: { ...s.hero } };
+      if (s.path && s.path !== a.id) {
+        if (s.hero.gems < PATH_SWITCH_COST) { toast(st, `Смена пути стоит ${PATH_SWITCH_COST} крист.`, "warn"); return st; }
+        st.hero.gems -= PATH_SWITCH_COST;
+        toast(st, `Путь сменён на «${def.name}»`, "gem");
+      } else if (!s.path) {
+        toast(st, `Выбран путь «${def.name}»`, "gem");
+      } else return s;
+      st.path = a.id;
+      return st;
+    }
+
+    case "PARTY_START": {
+      if (s.party && s.party.state === "fight") return s;
+      const dun = DUNGEONS.find(x => x.tier === a.tier);
+      if (!dun) return s;
+      const st = { ...s, daily: { ...s.daily }, totals: { ...s.totals }, hero: { ...s.hero } };
+      if (s.hero.level < dun.minLevel) { toast(st, `Нужен ${dun.minLevel} уровень героя`, "warn"); return st; }
+      if (s.totals.partyWins < dun.needWins) { toast(st, `Нужно ${dun.needWins} побед в пати`, "warn"); return st; }
+      if (st.daily.tickets < 1) { toast(st, "Нет билетов пати. +3 каждый день", "warn"); return st; }
+      st.daily.tickets -= 1;
+      const stats = getStats(s);
+      st.party = spawnParty(dun, stats);
+      pushLog(st, `Пати вошла в «${dun.name}». Босс уже точит зубы`);
+      return st;
+    }
+
+    case "PARTY_CLOSE": {
+      return { ...s, party: null };
+    }
+
     case "CLOSE_MODAL": return { ...s, modal: null };
     case "DISMISS_TOAST": return { ...s, toasts: s.toasts.filter(t => t.id !== a.id) };
     case "RESET": {
@@ -1089,7 +1270,7 @@ function tick(s: GameState, dt: number): GameState {
 function farmTick(s: GameState, dt: number): GameState {
   if (!s.battle.enemy && !s.battle.fx.length && !s.buffs.length) {
     // даже без боя нужны сбросы дня/недели
-    const daily = s.daily.date !== todayStr() ? { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] as string[] } : s.daily;
+    const daily = s.daily.date !== todayStr() ? { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] as string[], tickets: PARTY_TICKETS_DAILY } : s.daily;
     const weekly = s.weekly?.week !== weekKey() ? emptyWeekly() : s.weekly;
     if (daily !== s.daily || weekly !== s.weekly) return { ...s, daily, weekly };
     return s;
@@ -1118,7 +1299,7 @@ function farmTick(s: GameState, dt: number): GameState {
   }
   for (const k of Object.keys(B.cds)) if (B.cds[k] > 0) B.cds[k] = Math.max(0, B.cds[k] - dt);
   if (st.daily.date !== todayStr()) {
-    st.daily = { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] };
+    st.daily = { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [], tickets: PARTY_TICKETS_DAILY };
     st.duel.tokens = Math.min(DUEL_TOKENS_MAX, st.duel.tokens + 1);
     toast(st, "Новый день: +1 жетон дуэлей", "gem");
   }
@@ -1244,7 +1425,7 @@ export function loadGame(): GameState {
   }
   s.toasts = [];
   s.battle = { ...s.battle, fx: [], respawnT: s.battle.respawnT ?? 0 };
-  if (s.daily?.date !== todayStr()) s.daily = { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] };
+  if (s.daily?.date !== todayStr()) s.daily = { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [], tickets: PARTY_TICKETS_DAILY };
   // миграция со старых сейвов: новые поля
   if (s.vip == null) s.vip = 0;
   if (!s.slotLevel) s.slotLevel = { weapon: 0, helm: 0, amulet: 0, armor: 0, gloves: 0, boots: 0, ring1: 0, ring2: 0 };
