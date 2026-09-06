@@ -3,6 +3,7 @@ import { useGame } from "../game/useGame";
 import { QUESTS, DAILIES, WEEKLIES, ACHS, SHOP, RARITY, shopCost, VIP_LEVELS, type QuestDef } from "../game/data";
 import { fmt, getMetric, saveGame } from "../game/logic";
 import { Bar, Icon, SectionTitle } from "./bits";
+import { shareVK } from "../platform/vk";
 
 type Seg = "quests" | "shop" | "ach" | "opt";
 
@@ -222,7 +223,9 @@ function OptSeg() {
       <button
         onClick={() => {
           const text = "Я рублю боссов в «Бездна Idle» — рогалик-idle, где даже слизни платят налоги золотом. Присоединяйся!";
-          if (navigator.share) navigator.share({ title: "Бездна Idle", text }).catch(() => undefined);
+          void shareVK("Бездна Idle", text).then(shared => {
+            if (!shared && navigator.share) void navigator.share({ title: "Бездна Idle", text }).catch(() => undefined);
+          });
         }}
         className="btn btn-dark w-full py-3 text-[13px] flex items-center justify-center gap-2">
         <Icon n="share" className="w-4 h-4" />ПОЗВАТЬ ДРУГА В ПОХОД
