@@ -7,9 +7,10 @@ import { BattleScreen } from "./ui/BattleScreen";
 import { HeroTab, InventoryTab } from "./ui/HeroScreens";
 import { SkillsScreen } from "./ui/SkillsScreen";
 import { MoreScreen } from "./ui/MoreScreen";
+import { RunScreen } from "./ui/RunScreen";
 import { Modals } from "./ui/Modals";
 
-type Tab = "battle" | "hero" | "inv" | "skills" | "more";
+type Tab = "battle" | "run" | "hero" | "inv" | "skills" | "more";
 
 function HUD() {
   const { s, stats } = useGame();
@@ -106,20 +107,21 @@ function Nav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const { s } = useGame();
   const items: { id: Tab; n: string; i: string; badge?: boolean }[] = [
     { id: "battle", n: "Поход", i: "sword" },
+    { id: "run", n: "Рогалик", i: "route", badge: s.shards > 0 && !s.run.active },
     { id: "hero", n: "Герой", i: "user" },
     { id: "inv", n: "Рюкзак", i: "bag", badge: s.inv.length > 0 },
     { id: "skills", n: "Скилы", i: "spark", badge: s.hero.skillPoints > 0 },
     { id: "more", n: "Ещё", i: "dots" },
   ];
   return (
-    <div className="panel mx-3 mb-2 safe-b px-1.5 py-1.5 grid grid-cols-5 gap-1 relative z-10">
+    <div className="panel mx-3 mb-2 safe-b px-1.5 py-1.5 grid grid-cols-6 gap-1 relative z-10">
       {items.map(it => {
         const active = tab === it.id;
         return (
           <button key={it.id} onClick={() => setTab(it.id)}
             className={`relative py-1.5 rounded-xl flex flex-col items-center gap-0.5 transition-all duration-150 ${active ? "text-gold bg-gold/12 border border-gold/30" : "text-dim border border-transparent"}`}>
-            <Icon n={it.i} className="w-5 h-5" />
-            <span className="text-[9px] font-display tracking-wide">{it.n}</span>
+            <Icon n={it.i} className="w-4.5 h-4.5" />
+            <span className="text-[8px] font-display tracking-wide leading-none">{it.n}</span>
             {it.badge && !active && <span className="absolute top-1 right-1/4 w-1.5 h-1.5 rounded-full bg-arc shadow-[0_0_6px_#3fd0b6]" />}
           </button>
         );
@@ -142,6 +144,7 @@ function Shell() {
         <main className="flex-1 overflow-y-auto scroll-slim overscroll-contain px-3 py-3">
           <div key={tab} className="anim-rise">
             {tab === "battle" && <BattleScreen />}
+            {tab === "run" && <RunScreen />}
             {tab === "hero" && <HeroTab />}
             {tab === "inv" && <InventoryTab />}
             {tab === "skills" && <SkillsScreen />}

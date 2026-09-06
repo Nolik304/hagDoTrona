@@ -107,11 +107,27 @@ export interface WeeklyS {
   claimed: string[];
 }
 
+export interface RunS {
+  active: boolean;
+  wave: number; // 1..20
+  enemy: Enemy | null;
+  heroT: number;
+  enemyT: number;
+  hp: number;
+  maxHp: number;
+  cds: Record<string, number>;
+  relics: Record<string, number>; // id -> rank
+  bosses: number;
+  goldEarned: number;
+}
+
 export type Modal =
   | { t: "class" }
   | { t: "offline"; gold: number; xp: number; sec: number }
   | { t: "event"; id: string }
-  | { t: "levelup"; level: number };
+  | { t: "levelup"; level: number }
+  | { t: "runpick"; options: string[] }
+  | { t: "runover"; wave: number; shards: number; win: boolean };
 
 export interface Toast { id: number; text: string; kind: "info" | "gold" | "loot" | "warn" | "gem"; }
 
@@ -135,6 +151,10 @@ export interface GameState {
   weekly: WeeklyS;
   vip: number; // 0..5
   slotLevel: Record<Slot, number>; // заточка слотов (привязана к слоту, не к предмету)
+  run: RunS; // рогалик-режим «Экспедиция»
+  shards: number; // осколки бездны — мета-валюта
+  meta: Record<string, number>; // мета-апгрейды (Алтарь)
+  bestWave: number;
   shopBuys: Record<string, number>;
   lastSeen: number;
   uidSeq: number;
@@ -178,6 +198,13 @@ export type Action =
   | { type: "CHOOSE_EVENT"; idx: number }
   | { type: "UPGRADE_SLOT"; slot: Slot }
   | { type: "BUY_VIP" }
+  | { type: "START_RUN" }
+  | { type: "ABANDON_RUN" }
+  | { type: "RUN_CAST"; id: string }
+  | { type: "RUN_USE_POTION" }
+  | { type: "RUN_PICK"; id: string }
+  | { type: "RUN_CLOSE" }
+  | { type: "BUY_META"; id: string }
   | { type: "CLOSE_MODAL" }
   | { type: "DISMISS_TOAST"; id: number }
   | { type: "RESET" };

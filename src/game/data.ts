@@ -331,6 +331,50 @@ export const SHOP: ShopDef[] = [
 export const shopCost = (def: ShopDef, buys: number) =>
   def.kind === "box" ? Math.round(def.cost * Math.pow(1.22, buys)) : def.cost;
 
+/* ================= РОГАЛИК: ДАРЫ БЕЗДНЫ ================= */
+export interface RelicDef {
+  id: string; name: string; icon: string; max: number; cursed?: boolean;
+  desc: (rank: number) => string;
+  // какие статы даёт за 1 ранг
+  dmgPct?: number; as?: number; crit?: number; critDmg?: number; hpPct?: number;
+  luck?: number; goldPct?: number; xpPct?: number; lifesteal?: number; thorns?: number;
+  skillLvl?: number; bossGold?: number;
+}
+export const RELICS: RelicDef[] = [
+  { id: "fang", name: "Клык ярости", icon: "fang", max: 3, dmgPct: 25, desc: r => `+${25 * r}% урона` },
+  { id: "feather", name: "Перо сокола", icon: "feather", max: 3, as: 18, desc: r => `+${18 * r}% скорости атаки` },
+  { id: "eye", name: "Глаз снайпера", icon: "target", max: 3, crit: 12, desc: r => `+${12 * r}% шанса крита` },
+  { id: "heart2", name: "Бычье сердце", icon: "heart", max: 3, hpPct: 30, desc: r => `+${30 * r}% макс. HP` },
+  { id: "clover2", name: "Клевер гоблина", icon: "clover", max: 3, luck: 25, desc: r => `+${25 * r}% удачи` },
+  { id: "magnet", name: "Монетный магнит", icon: "coin", max: 3, goldPct: 35, desc: r => `+${35 * r}% золота` },
+  { id: "crystal", name: "Кристалл мудрости", icon: "star", max: 3, xpPct: 30, desc: r => `+${30 * r}% опыта` },
+  { id: "blood", name: "Кровавый клык", icon: "venom", max: 3, lifesteal: 8, desc: r => `Вампиризм: ${8 * r}% HP за убийство` },
+  { id: "thorn", name: "Шипастая броня", icon: "thorn", max: 3, thorns: 60, desc: r => `Шипы: ${60 * r}% урона врагу за его удар` },
+  { id: "focus", name: "Смертельный фокус", icon: "bolt", max: 3, critDmg: 40, desc: r => `+${40 * r}% крит. урона` },
+  { id: "gambit", name: "Азарт бездны", icon: "spark", max: 2, skillLvl: 1, desc: r => `+${r} к уровню всех скилов в забеге` },
+  { id: "idol", name: "Жадный идол", icon: "crown", max: 2, bossGold: 1, desc: r => `Золото с боссов ×${1 + r}` },
+  { id: "cursed", name: "Проклятая сила", icon: "skull", max: 1, cursed: true, dmgPct: 60, hpPct: -25, desc: () => `+60% урона, но −25% макс. HP. Оно того стоит?` },
+];
+
+/* ================= РОГАЛИК: АЛТАРЬ (МЕТА) ================= */
+export interface MetaDef {
+  id: string; name: string; icon: string; max: number; cost: (rank: number) => number;
+  desc: (rank: number) => string;
+  dmgPct?: number; hpPct?: number; goldPct?: number; luck?: number; headstart?: number;
+}
+export const META: MetaDef[] = [
+  { id: "temper", name: "Закалка", icon: "sword", max: 10, cost: r => 25 * (r + 1), dmgPct: 5, desc: r => `+${5 * r}% урона (везде)` },
+  { id: "hide", name: "Шкура носорога", icon: "shield", max: 10, cost: r => 25 * (r + 1), hpPct: 6, desc: r => `+${6 * r}% HP (везде)` },
+  { id: "hunch", name: "Предчувствие", icon: "clover", max: 10, cost: r => 20 * (r + 1), luck: 6, desc: r => `+${6 * r}% удачи (везде)` },
+  { id: "greed", name: "Алчность", icon: "coin", max: 10, cost: r => 20 * (r + 1), goldPct: 10, desc: r => `+${10 * r}% золота (везде)` },
+  { id: "headstart", name: "Фора", icon: "spark", max: 3, cost: r => 60 * (r + 1), headstart: 1, desc: r => `Забег начинается с ${r} случайн. даром(ами)` },
+];
+
+export const RUN_WAVES = 20;
+export const RUN_BOSS_EVERY = 5;
+export const shardReward = (wave: number, bosses: number, win: boolean) =>
+  wave * 2 + bosses * 10 + (win ? 100 : 0);
+
 /* ================= VIP ================= */
 export interface VipDef {
   name: string; color: string; cost: number;

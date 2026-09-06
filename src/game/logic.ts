@@ -1,8 +1,9 @@
 import {
   CLASSES, SKILLS, PASSIVES, ZONES, MOBS, KILL_PHRASES, QUESTS, DAILIES, WEEKLIES, ACHS,
   genItem, INV_CAP, skillCost, shopCost, SHOP, VIP_LEVELS, SLOT_UP_BONUS, SLOT_UP_MAX, slotUpCost,
+  RELICS, META, RUN_WAVES, RUN_BOSS_EVERY, shardReward,
 } from "./data";
-import type { Action, Enemy, GameState, Slot, Stats } from "./types";
+import type { Action, Enemy, GameState, RunS, Slot, Stats } from "./types";
 
 export const SAVE_KEY = "bezdna-idle-save-v1";
 export const SLOTS: Slot[] = ["weapon", "helm", "amulet", "armor", "gloves", "boots", "ring1", "ring2"];
@@ -76,6 +77,15 @@ export function getStats(s: GameState): Stats {
     goldPct += vip.goldPct; xpPct += vip.xpPct; luck += vip.luck;
     dmgPct += vip.dmgPct; hpPct += vip.hpPct; offlinePct += vip.offlinePct;
   }
+  // мета-апгрейды Алтаря (постоянные)
+  for (const m of META) {
+    const r = s.meta?.[m.id] || 0;
+    if (!r) continue;
+    if (m.dmgPct) dmgPct += m.dmgPct * r;
+    if (m.hpPct) hpPct += m.hpPct * r;
+    if (m.luck) luck += m.luck * r;
+    if (m.goldPct) goldPct += m.goldPct * r;
+  }
 
   let dmgBuff = 1, luckBuff = 0;
   for (const b of s.buffs) { if (b.dmgMult) dmgBuff *= b.dmgMult; if (b.luckAdd) luckBuff += b.luckAdd; }
@@ -107,6 +117,135 @@ export function spawnEnemy(zone: number, wave: number): Enemy {
   const xp = Math.round((7 + zone * 7 + wave * 1.6) * (boss ? 9 : 1));
   const r = Math.round(hp);
   return { key, name: MOBS[key]?.n ?? key, hp: r, maxHp: r, dmg, as: boss ? 0.6 : 0.85, boss, gold, xp };
+}
+
+/* =============== РОГАЛИК: экспедиция =============== */
+export const newRun = (): RunS => ({
+  active: false, wave: 1, enemy: null, heroT: 0, enemyT: 0, hp: 0, maxHp: 0,
+  cds: {}, relics: {}, bosses: 0, goldEarned: 0,
+});
+
+export function spawnRunEnemy(wave: number): Enemy {
+  const tier = Math.min(Math.floor((wave - 1) / RUN_BOSS_EVERY), ZONES.length - 2);
+  const z = ZONES[tier];
+  const boss = wave % RUN_BOSS_EVERY === 0;
+  const key = boss ? z.boss : z.mobs[Math.floor(Math.random() * z.mobs.length)];
+  let hp = 60 * Math.pow(1.33, wave) * (boss ? 5 : 1);
+  let dmg = 8 * Math.pow(1.24, wave) * (boss ? 1.6 : 1);
+  const gold = Math.round((10 + wave * 3) * (boss ? 8 : 1) * (0.9 + Math.random() * 0.2));
+  const r = Math.round(hp);
+  return { key, name: MOBS[key]?.n ?? key, hp: r, maxHp: r, dmg, as: boss ? 0.55 : 0.9, boss, gold, xp: 0 };
+}
+
+/** статы героя с учётом даров забега */
+export function runStats(s: GameState): Stats & { lifesteal: number; thorns: number; skillLvl: number; bossGoldMult: number } {
+  const base = getStats(s);
+  let dmgPct = 0, as = 0, crit = 0, critDmg = 0, hpPct = 0, luck = 0, goldPct = 0, xpPct = 0;
+  let lifesteal = 0, thorns = 0, skillLvl = 0, bossGoldMult = 1;
+  for (const def of RELICS) {
+    const r = s.run.relics[def.id] || 0;
+    if (!r) continue;
+    if (def.dmgPct) dmgPct += def.dmgPct * r;
+    if (def.as) as += def.as * r;
+    if (def.crit) crit += def.crit * r;
+    if (def.critDmg) critDmg += def.critDmg * r;
+    if (def.hpPct) hpPct += def.hpPct * r;
+    if (def.luck) luck += def.luck * r;
+    if (def.goldPct) goldPct += def.goldPct * r;
+    if (def.xpPct) xpPct += def.xpPct * r;
+    if (def.lifesteal) lifesteal += def.lifesteal * r;
+    if (def.thorns) thorns += def.thorns * r;
+    if (def.skillLvl) skillLvl += def.skillLvl * r;
+    if (def.bossGold) bossGoldMult += def.bossGold * r;
+  }
+  return {
+    ...base,
+    dmg: base.dmg * (1 + dmgPct / 100),
+    as: base.as * (1 + as / 100),
+    crit: Math.min(90, base.crit + crit),
+    critDmg: base.critDmg + critDmg,
+    maxHp: Math.round(base.maxHp * (1 + hpPct / 100)),
+    luck: base.luck + luck,
+    goldPct: base.goldPct + goldPct,
+    xpPct: base.xpPct + xpPct,
+    lifesteal, thorns, skillLvl, bossGoldMult,
+  };
+}
+
+export const relicOffer = (relics: Record<string, number>): string[] => {
+  const pool = RELICS.filter(r => (relics[r.id] || 0) < r.max);
+  const out: string[] = [];
+  const copy = [...pool];
+  while (out.length < 3 && copy.length) {
+    out.push(copy.splice(Math.floor(Math.random() * copy.length), 1)[0].id);
+  }
+  return out;
+};
+
+function runHeroHit(st: GameState, mult: number) {
+  const e = st.run.enemy;
+  if (!e) return;
+  const rs = runStats(st);
+  const isCrit = Math.random() * 100 < rs.crit;
+  let dmg = rs.dmg * mult * (0.9 + Math.random() * 0.2);
+  if (isCrit) dmg *= rs.critDmg / 100;
+  const d = Math.max(1, Math.round(dmg));
+  st.run.enemy = { ...e, hp: e.hp - d };
+  if (isCrit) st.totals.crits += 1;
+  st.totals.dmgDealt += d;
+  if (st.run.enemy.hp <= 0) runKill(st);
+}
+
+function runKill(st: GameState) {
+  const e = st.run.enemy;
+  if (!e) return;
+  const rs = runStats(st);
+  const gold = Math.round(e.gold * (1 + rs.goldPct / 100) * (e.boss ? rs.bossGoldMult : 1));
+  st.hero.gold += gold;
+  st.totals.goldEarned += gold;
+  st.run.goldEarned += gold;
+  st.run.enemy = null;
+  if (rs.lifesteal > 0) st.run.hp = Math.min(rs.maxHp, st.run.hp + rs.maxHp * rs.lifesteal / 100);
+
+  const wasBoss = e.boss;
+  if (wasBoss) st.run.bosses += 1;
+
+  if (st.run.wave >= RUN_WAVES) { endRun(st, true); return; }
+  st.run.wave += 1;
+  st.run.enemy = spawnRunEnemy(st.run.wave);
+  st.run.heroT = 0;
+  st.run.enemyT = 0;
+  if (wasBoss) {
+    st.run.hp = Math.min(rs.maxHp, st.run.hp + rs.maxHp * 0.25);
+    const opts = relicOffer(st.run.relics);
+    if (opts.length) st.modal = { t: "runpick", options: opts };
+  }
+}
+
+function runEnemyHit(st: GameState) {
+  const e = st.run.enemy;
+  if (!e) return;
+  const rs = runStats(st);
+  const mit = rs.armor / (rs.armor + 110);
+  const taken = Math.max(1, Math.round(e.dmg * (0.9 + Math.random() * 0.2) * (1 - mit)));
+  st.run.hp -= taken;
+  if (rs.thorns > 0 && st.run.enemy) {
+    const th = Math.round(rs.dmg * rs.thorns / 100);
+    st.run.enemy = { ...st.run.enemy, hp: st.run.enemy.hp - th };
+    if (st.run.enemy.hp <= 0) { runKill(st); return; }
+  }
+  if (st.run.hp <= 0) endRun(st, false);
+}
+
+function endRun(st: GameState, win: boolean, abandoned = false): GameState {
+  const reached = st.run.wave;
+  const shards = abandoned ? Math.round(shardReward(reached, st.run.bosses, false) / 2) : shardReward(reached, st.run.bosses, win);
+  st.shards += shards;
+  st.bestWave = Math.max(st.bestWave, reached);
+  st.run = { ...st.run, active: false, enemy: null };
+  st.modal = { t: "runover", wave: reached, shards, win };
+  toast(st, win ? "Экспедиция пройдена! Бездна впечатлена" : `Забег оборвался на волне ${reached}`, win ? "gem" : "warn");
+  return st;
 }
 
 /* =============== helpers =============== */
@@ -282,6 +421,10 @@ export function newGame(): GameState {
     weekly: emptyWeekly(),
     vip: 0,
     slotLevel: { weapon: 0, helm: 0, amulet: 0, armor: 0, gloves: 0, boots: 0, ring1: 0, ring2: 0 },
+    run: newRun(),
+    shards: 0,
+    meta: {},
+    bestWave: 0,
     shopBuys: {}, lastSeen: Date.now(), uidSeq: 1, fxSeq: 1, toastSeq: 1,
   };
 }
@@ -511,6 +654,94 @@ export function reducer(s: GameState, a: Action): GameState {
       return st;
     }
 
+    case "START_RUN": {
+      if (s.run.active) return s;
+      const st: GameState = {
+        ...s, hero: { ...s.hero }, run: { ...newRun(), relics: {} },
+        battle: { ...s.battle, paused: true, log: [...s.battle.log] },
+      };
+      const rs = runStats(st);
+      st.run.maxHp = rs.maxHp;
+      st.run.hp = rs.maxHp;
+      st.run.active = true;
+      st.run.enemy = spawnRunEnemy(1);
+      // мета «Фора»: стартовые дары
+      const head = META.find(m => m.id === "headstart");
+      const headRank = head ? s.meta?.[head.id] || 0 : 0;
+      for (let i = 0; i < headRank; i++) {
+        const opts = relicOffer(st.run.relics);
+        if (opts.length) st.run.relics = { ...st.run.relics, [opts[0]]: (st.run.relics[opts[0]] || 0) + 1 };
+      }
+      pushLog(st, "Экспедиция началась! Фарм на паузе — герой в Бездне");
+      return st;
+    }
+
+    case "ABANDON_RUN": {
+      if (!s.run.active) return s;
+      const st: GameState = { ...s, run: { ...s.run, relics: { ...s.run.relics } }, hero: { ...s.hero }, totals: { ...s.totals } };
+      return endRun(st, false, true);
+    }
+
+    case "RUN_CAST": {
+      if (!s.run.active || !s.run.enemy) return s;
+      const def = SKILLS.find(k => k.id === a.id);
+      if (!def || def.classId !== s.hero.classId) return s;
+      if (s.hero.level < def.unlockLevel) return s;
+      if ((s.run.cds[a.id] || 0) > 0) return s;
+      const st: GameState = { ...s, run: { ...s.run, cds: { ...s.run.cds } }, totals: { ...s.totals } };
+      st.run.cds[a.id] = def.cd;
+      st.totals.casts += 1;
+      st.weekly.casts += 1;
+      const rs = runStats(s);
+      const lvl = (s.skills[a.id] || 1) + rs.skillLvl;
+      for (let i = 0; i < def.hits(lvl); i++) runHeroHit(st, def.mult(lvl));
+      return st;
+    }
+
+    case "RUN_USE_POTION": {
+      if (!s.run.active || s.hero.potions <= 0) return s;
+      const st: GameState = { ...s, hero: { ...s.hero }, run: { ...s.run }, totals: { ...s.totals } };
+      const rs = runStats(s);
+      if (st.run.hp >= rs.maxHp) return s;
+      st.hero.potions -= 1;
+      st.run.hp = Math.min(rs.maxHp, st.run.hp + rs.maxHp * 0.45);
+      st.totals.potions += 1;
+      return st;
+    }
+
+    case "RUN_PICK": {
+      const def = RELICS.find(r => r.id === a.id);
+      if (!def) return s;
+      const st: GameState = { ...s, run: { ...s.run, relics: { ...s.run.relics } }, modal: null };
+      st.run.relics[a.id] = (st.run.relics[a.id] || 0) + 1;
+      const rs = runStats(st);
+      st.run.maxHp = rs.maxHp;
+      if (def.hpPct && def.hpPct > 0) st.run.hp = Math.min(rs.maxHp, st.run.hp + rs.maxHp * 0.3);
+      toast(st, `Дар принят: «${def.name}»`, "loot");
+      return st;
+    }
+
+    case "RUN_CLOSE": {
+      const st: GameState = { ...s, modal: null, battle: { ...s.battle, paused: false }, run: { ...newRun() } };
+      st.hero.hp = Math.max(st.hero.hp, 1);
+      pushLog(st, "Герой вернулся с экспедиции. Фарм продолжается");
+      return st;
+    }
+
+    case "BUY_META": {
+      const def = META.find(m => m.id === a.id);
+      if (!def) return s;
+      const rank = s.meta?.[a.id] || 0;
+      if (rank >= def.max) return s;
+      const cost = def.cost(rank);
+      const st: GameState = { ...s, meta: { ...s.meta } };
+      if (s.shards < cost) { toast(st, "Не хватает осколков бездны", "warn"); return st; }
+      st.shards -= cost;
+      st.meta[a.id] = rank + 1;
+      toast(st, `Алтарь: «${def.name}» ур. ${rank + 1}`, "gem");
+      return st;
+    }
+
     case "CLOSE_MODAL": return { ...s, modal: null };
     case "DISMISS_TOAST": return { ...s, toasts: s.toasts.filter(t => t.id !== a.id) };
     case "RESET": {
@@ -522,7 +753,28 @@ export function reducer(s: GameState, a: Action): GameState {
 }
 
 /* =============== tick =============== */
+function runTick(s: GameState, dt: number): GameState {
+  const st: GameState = {
+    ...s, hero: { ...s.hero }, totals: { ...s.totals },
+    run: { ...s.run, cds: { ...s.run.cds }, relics: { ...s.run.relics } },
+  };
+  const R = st.run;
+  for (const k of Object.keys(R.cds)) if (R.cds[k] > 0) R.cds[k] = Math.max(0, R.cds[k] - dt);
+
+  if (!R.enemy || !R.active) return st;
+  const rs = runStats(st);
+
+  R.heroT += rs.as * dt;
+  while (R.heroT >= 1 && R.enemy && R.active) { R.heroT -= 1; runHeroHit(st, 1); }
+  if (R.enemy && R.active) {
+    R.enemyT += R.enemy.as * dt;
+    while (R.enemyT >= 1 && R.enemy && R.active) { R.enemyT -= 1; runEnemyHit(st); }
+  }
+  return st;
+}
+
 function tick(s: GameState, dt: number): GameState {
+  if (s.run.active) return runTick(s, dt);
   if (!s.battle.enemy && !s.battle.fx.length && !s.buffs.length) {
     // даже без боя нужны сбросы дня/недели
     const daily = s.daily.date !== todayStr() ? { date: todayStr(), kills: 0, bosses: 0, gold: 0, claimed: [] as string[] } : s.daily;
@@ -678,6 +930,12 @@ export function loadGame(): GameState {
   if (!s.slotLevel) s.slotLevel = { weapon: 0, helm: 0, amulet: 0, armor: 0, gloves: 0, boots: 0, ring1: 0, ring2: 0 };
   for (const sl of SLOTS) if (s.slotLevel[sl] == null) s.slotLevel[sl] = 0;
   if (!s.weekly || s.weekly.week !== weekKey()) s.weekly = emptyWeekly();
+  // рогалик-режим (миграция)
+  if (!s.run) s.run = newRun();
+  s.run.active = false; s.run.enemy = null;
+  if (s.shards == null) s.shards = 0;
+  if (!s.meta) s.meta = {};
+  if (s.bestWave == null) s.bestWave = 0;
   // если герой застрял мёртвым в старом сейве — сразу воскрешаем
   if (s.hero.hp <= 0) s.hero = { ...s.hero, hp: Math.round(getStats(s).maxHp * 0.6) };
   if (s.battle.paused && s.battle.respawnT <= 0 && s.battle.enemy) s.battle.paused = false;

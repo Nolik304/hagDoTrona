@@ -51,6 +51,11 @@ const P: Record<string, ReactNode> = {
   wave: (<path d="M2 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />),
   book: (<><path d="M4 4h9a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3Z" /><path d="M16 8h4v12h-4" /><path d="M8 8h4M8 12h4" /></>),
   run: (<><circle cx="14" cy="5" r="2.2" /><path d="M6 21l3-6 3-2-1-5 4 2 3 2M9 8 5 10l1 4" /></>),
+  fang: (<path d="M12 2c4 0 7 4 7 9 0 6-4 11-7 11S5 17 5 11c0-5 3-9 7-9Zm0 3c-2 0-4 3-4 6 0 4 2.5 8 4 8s4-4 4-8c0-3-2-6-4-6Z" />),
+  feather: (<><path d="M20 4c-6 0-12 5-13 13 6 0 12-4 13-13Z" /><path d="M7 17 4 20M9 15l6-6M11 17l6-6" /></>),
+  thorn: (<><path d="M12 2 9 8l-7 1 5 5-1.5 8L12 18l6.5 4L17 14l5-5-7-1Z" /></>),
+  shard: (<><path d="M12 2 7 8l2 13h6l2-13Z" /><path d="M12 2 12 21" /></>),
+  route: (<><circle cx="6" cy="5" r="2.2" /><circle cx="18" cy="19" r="2.2" /><path d="M6 7.5V12a3 3 0 0 0 3 3h6a3 3 0 0 1 3 3v-1.5" strokeDasharray="3 2.5" /></>),
 };
 
 export function Icon({ n, className = "w-5 h-5", filled = false }: { n: string; className?: string; filled?: boolean }) {

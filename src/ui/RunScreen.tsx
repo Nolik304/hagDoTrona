@@ -1,0 +1,301 @@
+import { useEffect, useRef } from "react";
+import { useGame } from "../game/useGame";
+import { RELICS, META, RUN_WAVES, RUN_BOSS_EVERY } from "../game/data";
+import { SKILLS } from "../game/data";
+import { fmt, runStats } from "../game/logic";
+import { Icon, Bar, SectionTitle } from "./bits";
+import { MonsterArt } from "./art";
+
+/* ---------- модалка выбора дара ---------- */
+function RunPickModal() {
+  const { s, d } = useGame();
+  const m = s.modal;
+  if (!m || m.t !== "runpick") return null;
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/80 backdrop-blur-[3px]">
+      <div className="panel anim-pop w-full max-w-sm p-5">
+        <div className="text-center mb-4">
+          <div className="font-display text-[10px] tracking-[0.3em] text-arc mb-1">БОСС ПОВЕРЖЕН</div>
+          <h2 className="font-display text-xl text-fog text-outline">ВЫБЕРИ ДАР БЕЗДНЫ</h2>
+          <p className="text-dim text-xs mt-1">Один из трёх. Бездна не повторяет предложений.</p>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          {m.options.map(id => {
+            const def = RELICS.find(r => r.id === id);
+            if (!def) return null;
+            const c = def.cursed ? "#e5484d" : "#3fd0b6";
+            const rank = s.run.relics[id] || 0;
+            return (
+              <button key={id} onClick={() => d({ type: "RUN_PICK", id })}
+                className="panel p-3 text-left transition-all hover:-translate-y-0.5"
+                style={{ borderColor: c + "55", boxShadow: `0 0 14px ${c}22` }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 shrink-0 rounded-xl grid place-items-center border"
+                    style={{ color: c, borderColor: c + "55", background: c + "14" }}>
+                    <Icon n={def.icon} className="w-6 h-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-display text-[14px]" style={{ color: c }}>
+                      {def.name}{rank > 0 && <span className="text-dim text-[10px] ml-1">(ранг {rank + 1})</span>}
+                    </div>
+                    <div className="text-[11px] text-fog/85">{def.desc(rank + 1)}</div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- модалка итогов забега ---------- */
+function RunOverModal() {
+  const { s, d } = useGame();
+  const m = s.modal;
+  if (!m || m.t !== "runover") return null;
+  const c = m.win ? "#f0b429" : "#e5484d";
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/80 backdrop-blur-[3px]">
+      <div className="panel anim-pop w-full max-w-sm p-5 text-center relative overflow-hidden">
+        <div className="absolute -top-14 inset-x-0 h-32 blur-2xl pointer-events-none" style={{ background: c + "26" }} />
+        <div className="relative">
+          <div className="w-16 h-16 mx-auto mb-3 rounded-full grid place-items-center border-2 anim-float"
+            style={{ borderColor: c + "66", color: c, background: c + "14", boxShadow: `0 0 24px ${c}44` }}>
+            <Icon n={m.win ? "trophy" : "skull"} className="w-8 h-8" />
+          </div>
+          <h2 className="font-display text-2xl text-outline mb-1" style={{ color: c }}>
+            {m.win ? "БЕЗДНА ПОКОРЕНА!" : "ЗАБЕГ ОКОНЧЕН"}
+          </h2>
+          <p className="text-dim text-xs mb-4">
+            {m.win ? "Все 20 волн позади. Такое не забывают." : `Ты пал на волне ${m.wave}. Бездна подождёт.`}
+          </p>
+          <div className="flex justify-center gap-3 mb-5">
+            <div className="panel px-4 py-3">
+              <div className="font-display text-lg text-fog">{m.wave}<span className="text-dim text-xs">/{RUN_WAVES}</span></div>
+              <div className="text-[10px] text-dim">волна</div>
+            </div>
+            <div className="panel px-4 py-3">
+              <div className="font-display text-lg text-mana flex items-center gap-1"><Icon n="shard" className="w-4 h-4" filled />{fmt(m.shards)}</div>
+              <div className="text-[10px] text-dim">осколков</div>
+            </div>
+          </div>
+          <button onClick={() => d({ type: "RUN_CLOSE" })} className="btn btn-gold w-full py-3.5 text-[15px]">ВЕРНУТЬСЯ</button>
+          <p className="text-[10px] text-dim/70 mt-2">Осколки трать в Алтаре — бонусы остаются навсегда.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- активный забег ---------- */
+function ActiveRun() {
+  const { s, d } = useGame();
+  const R = s.run;
+  const e = R.enemy;
+  const rs = runStats(s);
+  const artRef = useRef<HTMLDivElement>(null);
+  const skills = SKILLS.filter(k => k.classId === s.hero.classId);
+  const bossesAhead = RUN_WAVES / RUN_BOSS_EVERY;
+
+  const relicList = RELICS.filter(rf => (R.relics[rf.id] || 0) > 0);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* прогресс забега */}
+      <div className="panel px-3 py-2.5">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="font-display text-[12px] tracking-wider text-arc">ЭКСПЕДИЦИЯ</span>
+          <span className="text-[11px] text-dim tabular-nums">Волна <b className="text-fog">{R.wave}</b>/{RUN_WAVES}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {Array.from({ length: bossesAhead }).map((_, i) => {
+            const bossWave = (i + 1) * RUN_BOSS_EVERY;
+            const done = R.wave > bossWave;
+            const cur = R.wave <= bossWave && R.wave > i * RUN_BOSS_EVERY;
+            return (
+              <div key={i} className="flex-1 flex items-center gap-1">
+                <div className={`flex-1 h-1.5 rounded-full ${done ? "bg-arc" : cur ? "bg-arc/50" : "bg-line/60"}`} />
+                <Icon n="skull" className={`w-4 h-4 shrink-0 ${done ? "text-blood" : cur ? "text-fog" : "text-dim/40"}`} filled={done} />
+              </div>
+            );
+          })}
+        </div>
+        <div className="text-[9px] text-dim/80 mt-1 text-right">боссы на 5 · 10 · 15 · 20</div>
+      </div>
+
+      {/* арена */}
+      <div className="panel relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none"
+          style={{ background: "radial-gradient(420px 240px at 50% 30%, rgba(63,208,182,0.12), transparent 70%)" }} />
+        <div className="relative px-4 pt-3 flex items-center justify-between">
+          <span className="font-display text-[13px] tracking-wide text-arc">РАЗЛОМ БЕЗДНЫ</span>
+          <span className="text-[10px] text-dim italic">фарм на паузе</span>
+        </div>
+        <div className="relative h-48 grid place-items-center">
+          {e && (
+            <>
+              <div ref={artRef} className={e.boss ? "w-44 h-44" : "w-36 h-36"}>
+                <MonsterArt k={e.key} boss={e.boss} />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="relative px-4 pb-3">
+          {e && (
+            <>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-display text-[14px] text-fog truncate">{e.name}</span>
+                {e.boss && <span className="shrink-0 text-[9px] font-display tracking-widest text-blood bg-blood/15 border border-blood/50 px-1.5 py-0.5 rounded-md">БОСС</span>}
+                <span className="ml-auto text-[11px] text-dim tabular-nums">{fmt(Math.max(0, e.hp))}/{fmt(e.maxHp)}</span>
+              </div>
+              <Bar v={e.hp} max={e.maxHp} color={e.boss ? "#e5484d" : "#ff6b3d"} h="h-4" shine />
+            </>
+          )}
+          {/* hp героя в забеге */}
+          <div className="mt-2">
+            <div className="flex justify-between text-[10px] text-dim mb-0.5">
+              <span>Твоё HP</span><span className="tabular-nums">{fmt(Math.max(0, R.hp))}/{fmt(rs.maxHp)}</span>
+            </div>
+            <Bar v={R.hp} max={rs.maxHp} color={R.hp / rs.maxHp < 0.3 ? "#e5484d" : "#4ade80"} h="h-3" shine />
+          </div>
+        </div>
+      </div>
+
+      {/* дары */}
+      <div className="flex flex-wrap gap-1.5 min-h-[26px]">
+        {relicList.length === 0 && <span className="text-[10px] text-dim/60 px-1">Даров пока нет — одолей босса, чтобы выбрать.</span>}
+        {relicList.map(rf => {
+          const rank = R.relics[rf.id] || 0;
+          const c = rf.cursed ? "#e5484d" : "#3fd0b6";
+          return (
+            <span key={rf.id} className="text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1"
+              style={{ color: c, borderColor: c + "55", background: c + "12" }}>
+              <Icon n={rf.icon} className="w-3 h-3" />{rf.name}{rank > 1 ? ` ×${rank}` : ""}
+            </span>
+          );
+        })}
+      </div>
+
+      {/* скилы */}
+      <div className="grid grid-cols-4 gap-2">
+        {skills.map(sk => {
+          const cd = R.cds[sk.id] || 0;
+          const locked = s.hero.level < sk.unlockLevel;
+          const ready = cd <= 0 && !locked && !!e;
+          return (
+            <button key={sk.id} onClick={() => d({ type: "RUN_CAST", id: sk.id })} disabled={!ready}
+              className="relative btn btn-dark py-2.5 px-1 h-[64px] flex flex-col items-center justify-center gap-0.5"
+              style={ready ? { borderColor: "#3fd0b666" } : undefined}>
+              <Icon n={sk.icon} className="w-5 h-5 text-arc" />
+              <span className="text-[8px] text-fog font-body font-semibold text-center leading-tight px-0.5">{sk.name}</span>
+              {!locked && cd > 0 && (
+                <span className="absolute inset-x-0 bottom-0 bg-abyss/85 border-t border-line flex items-end justify-center pointer-events-none"
+                  style={{ height: (cd / sk.cd) * 100 + "%" }}>
+                  <span className="text-[10px] font-display text-fog pb-0.5">{cd.toFixed(1)}</span>
+                </span>
+              )}
+              {locked && <span className="absolute inset-0 bg-abyss/80 grid place-items-center text-dim"><Icon n="lock" className="w-4 h-4" /></span>}
+            </button>
+          );
+        })}
+        <button onClick={() => d({ type: "RUN_USE_POTION" })} disabled={s.hero.potions <= 0}
+          className="btn btn-dark py-2.5 px-1 h-[64px] flex flex-col items-center justify-center gap-0.5"
+          style={s.hero.potions > 0 ? { borderColor: "#3fd0b666" } : undefined}>
+          <Icon n="flask" className="w-5 h-5 text-arc" />
+          <span className="text-[8px] text-fog font-body font-semibold">Зелье</span>
+          <span className="text-[10px] text-arc font-body font-bold">×{s.hero.potions}</span>
+        </button>
+      </div>
+
+      <button onClick={() => d({ type: "ABANDON_RUN" })} className="btn btn-dark w-full py-2.5 text-[12px] flex items-center justify-center gap-1.5 text-dim">
+        <Icon n="x" className="w-4 h-4" />Сдаться (половина осколков)
+      </button>
+    </div>
+  );
+}
+
+/* ---------- главный экран ---------- */
+export function RunScreen() {
+  const { s, d } = useGame();
+  if (s.run.active) {
+    return (
+      <>
+        <ActiveRun />
+        <RunPickModal />
+        <RunOverModal />
+      </>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <RunOverModal />
+
+      {/* интро */}
+      <div className="panel p-4 relative overflow-hidden">
+        <div className="absolute -top-16 -right-12 w-44 h-44 rounded-full bg-arc/12 blur-2xl pointer-events-none" />
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-1">
+            <Icon n="route" className="w-6 h-6 text-arc" />
+            <h2 className="font-display text-xl text-fog text-outline">ЭКСПЕДИЦИЯ В БЕЗДНУ</h2>
+          </div>
+          <p className="text-[12px] text-dim leading-relaxed mb-3">
+            Рогалик-режим: 20 волн, босс каждые 5. После каждого босса выбираешь <b className="text-arc">1 из 3 Даров</b> —
+            собирай билд. Падёшь — забег сгорает, но осколки остаются.
+          </p>
+          <div className="flex gap-3 mb-4">
+            <div className="flex-1 bg-abyss/60 border border-line/60 rounded-xl py-2.5 text-center">
+              <div className="font-display text-lg text-arc">{s.bestWave}<span className="text-dim text-xs">/{RUN_WAVES}</span></div>
+              <div className="text-[9px] text-dim">рекорд волны</div>
+            </div>
+            <div className="flex-1 bg-abyss/60 border border-line/60 rounded-xl py-2.5 text-center">
+              <div className="font-display text-lg text-mana flex items-center justify-center gap-1"><Icon n="shard" className="w-4 h-4" filled />{fmt(s.shards)}</div>
+              <div className="text-[9px] text-dim">осколки бездны</div>
+            </div>
+          </div>
+          <button onClick={() => d({ type: "START_RUN" })} className="btn btn-arc w-full py-3.5 text-[15px]">
+            НАЧАТЬ ЭКСПЕДИЦИЮ
+          </button>
+          <p className="text-[10px] text-dim/70 mt-2 text-center">Фарм встанет на паузу, пока герой в разломе.</p>
+        </div>
+      </div>
+
+      {/* Алтарь */}
+      <div className="panel p-3">
+        <SectionTitle icon="shard" right={<span className="text-[10px] text-mana flex items-center gap-1"><Icon n="shard" className="w-3.5 h-3.5" filled />{fmt(s.shards)}</span>}>
+          АЛТАРЬ БЕЗДНЫ
+        </SectionTitle>
+        <p className="text-[10px] text-dim mb-2.5">Постоянные бонусы за осколки. Работают везде — и в фарме, и в забегах.</p>
+        <div className="flex flex-col gap-2">
+          {META.map(mdef => {
+            const rank = s.meta[mdef.id] || 0;
+            const maxed = rank >= mdef.max;
+            const cost = mdef.cost(rank);
+            const afford = s.shards >= cost;
+            return (
+              <div key={mdef.id} className="bg-abyss/60 border border-line/60 rounded-xl p-3 flex items-center gap-2.5">
+                <div className="w-10 h-10 shrink-0 rounded-lg grid place-items-center border border-mana/40 bg-mana/8 text-mana">
+                  <Icon n={mdef.icon} className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-display text-[12px] text-fog flex items-center gap-1.5">
+                    {mdef.name}
+                    <span className="text-[9px] text-mana font-body">ур. {rank}/{mdef.max}</span>
+                  </div>
+                  <div className="text-[10px] text-dim">{maxed ? mdef.desc(rank) : mdef.desc(rank + 1)}</div>
+                  {!maxed && <Bar v={rank} max={mdef.max} color="#4cc3ff" h="h-1" className="mt-1.5" />}
+                </div>
+                <button disabled={maxed || !afford} onClick={() => d({ type: "BUY_META", id: mdef.id })}
+                  className="btn btn-arc px-2.5 py-2 text-[10px] shrink-0 flex items-center gap-1">
+                  {maxed ? "МАКС" : <><Icon n="shard" className="w-3 h-3" filled />{fmt(cost)}</>}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
