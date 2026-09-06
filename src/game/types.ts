@@ -2,7 +2,7 @@ export type ClassId = "mage" | "archer";
 
 export type BaseSlot = "weapon" | "helm" | "amulet" | "armor" | "gloves" | "boots" | "ring";
 export type Slot = Exclude<BaseSlot, "ring"> | "ring1" | "ring2";
-export type Rarity = 0 | 1 | 2 | 3 | 4;
+export type Rarity = 0 | 1 | 2 | 3 | 4 | 5;
 
 export type StatKey =
   | "dmg" | "dmgPct" | "hp" | "armor" | "crit" | "critDmg"
@@ -16,6 +16,7 @@ export interface Item {
   ilvl: number;
   stats: Partial<Record<StatKey, number>>;
   sell: number;
+  abyss?: boolean;
 }
 
 export interface Enemy {
@@ -142,6 +143,7 @@ export interface DuelS {
 
 export interface RunS {
   active: boolean;
+  kind: "exp" | "portal";
   wave: number; // 1..20
   enemy: Enemy | null;
   heroT: number;
@@ -188,6 +190,8 @@ export interface GameState {
   shards: number; // осколки бездны — мета-валюта
   meta: Record<string, number>; // мета-апгрейды (Алтарь)
   bestWave: number;
+  blood: number;
+  godstone: number | null;
   duel: DuelS;
   shopBuys: Record<string, number>;
   lastSeen: number;
@@ -232,13 +236,15 @@ export type Action =
   | { type: "CHOOSE_EVENT"; idx: number }
   | { type: "UPGRADE_SLOT"; slot: Slot }
   | { type: "BUY_VIP" }
-  | { type: "START_RUN" }
+  | { type: "START_RUN"; kind?: "exp" | "portal" }
   | { type: "ABANDON_RUN" }
   | { type: "RUN_CAST"; id: string }
   | { type: "RUN_USE_POTION" }
   | { type: "RUN_PICK"; id: string }
   | { type: "RUN_CLOSE" }
   | { type: "BUY_META"; id: string }
+  | { type: "BUY_GODSTONE" }
+  | { type: "UP_GODSTONE" }
   | { type: "DUEL_SEARCH" }
   | { type: "DUEL_CAST"; id: string }
   | { type: "DUEL_CLOSE" }

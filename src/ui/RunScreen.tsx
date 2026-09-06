@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useGame } from "../game/useGame";
-import { RELICS, META, RUN_WAVES, RUN_BOSS_EVERY } from "../game/data";
+import { RELICS, META, RUN_WAVES, RUN_BOSS_EVERY, GODSTONE } from "../game/data";
 import { SKILLS } from "../game/data";
 import { fmt, runStats } from "../game/logic";
 import { Icon, Bar, SectionTitle } from "./bits";
@@ -106,7 +106,7 @@ function ActiveRun() {
       {/* прогресс забега */}
       <div className="panel px-3 py-2.5">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="font-display text-[12px] tracking-wider text-arc">ЭКСПЕДИЦИЯ</span>
+          <span className="font-display text-[12px] tracking-wider text-arc">{R.kind === "portal" ? "ПОРТАЛ БЕЗДНЫ" : "ЭКСПЕДИЦИЯ"}</span>
           <span className="text-[11px] text-dim tabular-nums">Волна <b className="text-fog">{R.wave}</b>/{RUN_WAVES}</span>
         </div>
         <div className="flex items-center gap-1">
@@ -258,8 +258,21 @@ export function RunScreen() {
           <button onClick={() => d({ type: "START_RUN" })} className="btn btn-arc w-full py-3.5 text-[15px]">
             НАЧАТЬ ЭКСПЕДИЦИЮ
           </button>
+          <button onClick={() => d({ type: "START_RUN", kind: "portal" })} disabled={s.blood < 1} className="btn btn-ember w-full py-3 mt-2 text-[13px]">
+            ОТКРЫТЬ ПОРТАЛ · КРОВЬ: {s.blood}
+          </button>
           <p className="text-[10px] text-dim/70 mt-2 text-center">Фарм встанет на паузу, пока герой в разломе.</p>
         </div>
+      </div>
+
+      <div className="panel p-3">
+        <SectionTitle icon="spark" right={<span className="text-[10px] text-blood">Кровь: {s.blood}</span>}>КАМЕНЬ БОГА</SectionTitle>
+        <p className="text-[10px] text-dim mb-2">Постоянно усиливает героя. Каждый уровень даёт бонусы ко всем основным характеристикам.</p>
+        {s.godstone === null ? (
+          <button onClick={() => d({ type: "BUY_GODSTONE" })} disabled={s.hero.gems < GODSTONE.price} className="btn btn-arc w-full py-2.5">ПРОБУДИТЬ ЗА {GODSTONE.price} КРИСТАЛЛОВ</button>
+        ) : (
+          <button onClick={() => d({ type: "UP_GODSTONE" })} disabled={s.hero.gold < GODSTONE.cost(s.godstone)} className="btn btn-gold w-full py-2.5">УСИЛИТЬ УРОВЕНЬ {s.godstone} · {fmt(GODSTONE.cost(s.godstone))} ЗОЛОТА</button>
+        )}
       </div>
 
       {/* Алтарь */}

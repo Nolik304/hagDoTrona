@@ -140,7 +140,20 @@ export const RARITY: { name: string; color: string; mult: number }[] = [
   { name: "Редкий", color: "#38bdf8", mult: 1.8 },
   { name: "Эпический", color: "#c084fc", mult: 2.4 },
   { name: "Легендарный", color: "#fbbf24", mult: 3.2 },
+  { name: "Бездна", color: "#ff4d6d", mult: 4.4 },
 ];
+
+export const ABYSS_SET: Partial<Record<BaseSlot, { name: string; stats: Partial<Record<StatKey, number>> }>> = {
+  weapon: { name: "Коготь Пожирателя", stats: { dmg: 16, dmgPct: 14, crit: 6 } },
+  helm: { name: "Венец Пустоты", stats: { hp: 90, armor: 22, xpPct: 8 } },
+  amulet: { name: "Око Бездны", stats: { crit: 9, critDmg: 28, dmgPct: 10 } },
+  armor: { name: "Панцирь Отродья", stats: { armor: 30, hp: 120, regen: 1.4 } },
+  gloves: { name: "Когтистые перчатки Бездны", stats: { as: 12, crit: 6, dmgPct: 8 } },
+  boots: { name: "Поступь Тьмы", stats: { armor: 18, goldPct: 16, hp: 60 } },
+  ring: { name: "Печатка Отродья", stats: { critDmg: 24, luck: 10, dmgPct: 10 } },
+};
+export const ABYSS_SET_BONUS = 3;
+export const GODSTONE = { price: 40, cost: (level: number) => Math.round(400 * Math.pow(1.33, level)), chance: (level: number) => Math.max(1.5, Math.round(90 * Math.pow(0.92, level) * 10) / 10) };
 
 export const SLOT_INFO: Record<BaseSlot, { n: string; icon: string }> = {
   weapon: { n: "Оружие", icon: "sword" },
@@ -244,7 +257,7 @@ export const INV_CAP = 40;
 /* ================= QUESTS ================= */
 export interface QuestDef {
   id: string; title: string; desc: string; metric: string; target: number;
-  reward: { gold?: number; gems?: number }; flavor: string;
+  reward: { gold?: number; gems?: number; tokens?: number }; flavor: string;
 }
 export const QUESTS: QuestDef[] = [
   { id: "q1", title: "Разминка", desc: "Победи 15 врагов", metric: "kills", target: 15, reward: { gold: 120 }, flavor: "Гильдия даёт новичкам самое грязное дело. Держи метлу... то есть меч." },

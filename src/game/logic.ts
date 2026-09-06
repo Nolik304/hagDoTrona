@@ -1,7 +1,7 @@
 import {
   CLASSES, SKILLS, PASSIVES, ZONES, MOBS, KILL_PHRASES, QUESTS, DAILIES, WEEKLIES, ACHS,
   genItem, INV_CAP, skillCost, shopCost, SHOP, VIP_LEVELS, SLOT_UP_BONUS, SLOT_UP_MAX, slotUpCost,
-  RELICS, META, RUN_WAVES, RUN_BOSS_EVERY, shardReward, DUEL_NAMES, DUEL_TOKENS_START,
+  RELICS, META, RUN_WAVES, RUN_BOSS_EVERY, shardReward, DUEL_NAMES, DUEL_TOKENS_START, DUEL_TOKENS_MAX, ABYSS_SET, ABYSS_SET_BONUS, GODSTONE,
 } from "./data";
 import type { Action, DuelFoe, DuelS, Enemy, GameState, RunS, Slot, Stats } from "./types";
 
@@ -72,6 +72,20 @@ export function getStats(s: GameState): Stats {
       }
     }
   }
+  const abyssPieces = SLOTS.filter(slot => s.equip[slot]?.abyss).length;
+  dmgPct += abyssPieces * ABYSS_SET_BONUS;
+  hpPct += abyssPieces * ABYSS_SET_BONUS;
+  if (s.godstone !== null) {
+    const god = s.godstone;
+    dmgPct += god * 2;
+    hpPct += god * 2;
+    crit += god * 0.5;
+    asPct += god * 0.5;
+    luck += god;
+    goldPct += god;
+    xpPct += god;
+    armor += god;
+  }
   const P = (id: string) => s.passives[id] || 0;
   dmgPct += 8 * P("power"); crit += 2.5 * P("focus"); hpPct += 8 * P("vitality");
   armor += 6 * P("skin"); goldPct += 8 * P("greed"); xpPct += 7 * P("wisdom");
@@ -127,7 +141,7 @@ export function spawnEnemy(zone: number, wave: number): Enemy {
 
 /* =============== РОГАЛИК: экспедиция =============== */
 export const newRun = (): RunS => ({
-  active: false, wave: 1, enemy: null, heroT: 0, enemyT: 0, hp: 0, maxHp: 0,
+  active: false, kind: "exp", wave: 1, enemy: null, heroT: 0, enemyT: 0, hp: 0, maxHp: 0,
   cds: {}, relics: {}, bosses: 0, goldEarned: 0,
 });
 
@@ -141,6 +155,13 @@ export function spawnRunEnemy(wave: number): Enemy {
   const gold = Math.round((10 + wave * 3) * (boss ? 8 : 1) * (0.9 + Math.random() * 0.2));
   const r = Math.round(hp);
   return { key, name: MOBS[key]?.n ?? key, hp: r, maxHp: r, dmg, as: boss ? 0.55 : 0.9, boss, gold, xp: 0 };
+}
+
+function genAbyssItem(uid: number, classId: GameState["hero"]["classId"], wave: number) {
+  const slots = Object.keys(ABYSS_SET) as Array<keyof typeof ABYSS_SET>;
+  const base = slots[Math.floor(Math.random() * slots.length)];
+  const def = ABYSS_SET[base];
+  return { uid, base, name: def?.name ?? "Предмет Бездны", rarity: 5 as const, ilvl: wave * 2, stats: def?.stats ?? {}, sell: 400 + wave * 6, abyss: true };
 }
 
 /** статы героя с учётом даров забега */
@@ -206,7 +227,7 @@ function runKill(st: GameState) {
   const e = st.run.enemy;
   if (!e) return;
   const rs = runStats(st);
-  const gold = Math.round(e.gold * (1 + rs.goldPct / 100) * (e.boss ? rs.bossGoldMult : 1));
+    const gold = Math.round(e.gold * (1 + rs.goldPct / 100) * (e.boss ? rs.bossGoldMult : 1));
   st.hero.gold += gold;
   st.totals.goldEarned += gold;
   st.run.goldEarned += gold;
@@ -215,6 +236,23 @@ function runKill(st: GameState) {
 
   const wasBoss = e.boss;
   if (wasBoss) st.run.bosses += 1;
+
+  if (st.run.kind === "portal") {
+    if (wasBoss) {
+      st.uidSeq += 1;
+      const item = genAbyssItem(st.uidSeq, st.hero.classId, st.run.wave);
+      if (st.inv.length < INV_CAP) st.inv = [...st.inv, item];
+      else { st.hero.gold += item.sell; st.totals.goldEarned += item.sell; }
+      if (Math.random() < 0.08) { st.blood += 1; toast(st, "Кровь Демона! Портал зовёт снова", "gem"); }
+    } else if (Math.random() < 0.3) {
+      st.uidSeq += 1;
+      const item = genItem(st.hero.level * 4 + st.run.wave * 2, 2, st.hero.classId, rs.luck, st.uidSeq);
+      if (st.inv.length < INV_CAP) st.inv = [...st.inv, item];
+    }
+  } else if (wasBoss && Math.random() < 0.07) {
+    st.blood += 1;
+    toast(st, "КРОВЬ ДЕМОНА! Ключ к Порталу Бездны", "gem");
+  }
 
   if (st.run.wave >= RUN_WAVES) { endRun(st, true); return; }
   st.run.wave += 1;
@@ -431,6 +469,8 @@ export function newGame(): GameState {
     shards: 0,
     meta: {},
     bestWave: 0,
+    blood: 0,
+    godstone: null,
     duel: newDuel(),
     shopBuys: {}, lastSeen: Date.now(), uidSeq: 1, fxSeq: 1, toastSeq: 1,
   };
@@ -663,10 +703,17 @@ export function reducer(s: GameState, a: Action): GameState {
 
     case "START_RUN": {
       if (s.run.active) return s;
+      const kind = a.kind ?? "exp";
+      if (kind === "portal" && s.blood < 1) {
+        const st = { ...s };
+        toast(st, "Нужна Кровь Демона — выбивай её с боссов", "warn");
+        return st;
+      }
       const st: GameState = {
-        ...s, hero: { ...s.hero }, run: { ...newRun(), relics: {} },
+        ...s, hero: { ...s.hero }, run: { ...newRun(), kind, relics: {} },
         battle: { ...s.battle, paused: true, log: [...s.battle.log] },
       };
+      if (kind === "portal") st.blood -= 1;
       const rs = runStats(st);
       st.run.maxHp = rs.maxHp;
       st.run.hp = rs.maxHp;
@@ -679,7 +726,29 @@ export function reducer(s: GameState, a: Action): GameState {
         const opts = relicOffer(st.run.relics);
         if (opts.length) st.run.relics = { ...st.run.relics, [opts[0]]: (st.run.relics[opts[0]] || 0) + 1 };
       }
-      pushLog(st, "Экспедиция началась! Фарм на паузе — герой в Бездне");
+      pushLog(st, kind === "portal" ? "Портал Бездны открыт! Фарм на паузе" : "Экспедиция началась! Фарм на паузе — герой в Бездне");
+      return st;
+    }
+
+    case "BUY_GODSTONE": {
+      if (s.godstone !== null) return s;
+      const st = { ...s, hero: { ...s.hero } };
+      if (st.hero.gems < GODSTONE.price) { toast(st, "Нужно 40 кристаллов для пробуждения", "warn"); return st; }
+      st.hero.gems -= GODSTONE.price;
+      st.godstone = 0;
+      toast(st, "Камень Бога пробуждён", "gem");
+      return st;
+    }
+
+    case "UP_GODSTONE": {
+      if (s.godstone === null) return s;
+      const level = s.godstone;
+      const st = { ...s, hero: { ...s.hero } };
+      const cost = GODSTONE.cost(level);
+      if (st.hero.gold < cost) { toast(st, "Не хватает золота для усиления Камня Бога", "warn"); return st; }
+      st.hero.gold -= cost;
+      st.godstone = level + 1;
+      toast(st, `Камень Бога усилен до ${level + 1} уровня`, "gem");
       return st;
     }
 
@@ -1010,10 +1079,13 @@ export function loadGame(): GameState {
   if (!s.weekly || s.weekly.week !== weekKey()) s.weekly = emptyWeekly();
   // рогалик-режим (миграция)
   if (!s.run) s.run = newRun();
+  if (!s.run.kind) s.run.kind = "exp";
   s.run.active = false; s.run.enemy = null;
   if (s.shards == null) s.shards = 0;
   if (!s.meta) s.meta = {};
   if (s.bestWave == null) s.bestWave = 0;
+  if (s.blood == null) s.blood = 0;
+  if (s.godstone === undefined) s.godstone = null;
   if (!s.duel) s.duel = newDuel();
   // если герой застрял мёртвым в старом сейве — сразу воскрешаем
   if (s.hero.hp <= 0) s.hero = { ...s.hero, hp: Math.round(getStats(s).maxHp * 0.6) };
