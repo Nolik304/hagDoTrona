@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useGame } from "../game/useGame";
-import { CLASSES, RARITY, INV_CAP, SLOT_UP_BONUS, SLOT_UP_MAX, slotUpCost, VIP_LEVELS } from "../game/data";
+import { CLASSES, RARITY, INV_CAP, SLOT_UP_BONUS, SLOT_UP_MAX, slotUpCost, VIP_LEVELS, GODSTONE, ABYSS_SET_BONUS } from "../game/data";
 import { fmt, SLOTS } from "../game/logic";
-import { Icon, ItemRow, slotIcon, SectionTitle, rarColor } from "./bits";
+import { Icon, ItemRow, slotIcon, SectionTitle, rarColor, Bar } from "./bits";
 import { HeroArt } from "./art";
 import type { Slot } from "../game/types";
 
@@ -89,10 +89,72 @@ function SharpenPanel() {
   );
 }
 
+/** Камень Бога: бесконечная шкала, растит ВСЕ статы, до капа не добраться */
+function GodstonePanel() {
+  const { s, d } = useGame();
+  const gs = s.godstone;
+  if (gs == null) {
+    return (
+      <div className="panel p-3 relative overflow-hidden">
+        <div className="absolute -top-10 -right-8 w-32 h-32 rounded-full blur-2xl pointer-events-none" style={{ background: "rgba(251,191,36,0.12)" }} />
+        <div className="relative">
+          <SectionTitle icon="stone" right={<span className="text-[9px] text-dim">артефакт</span>}>КАМЕНЬ БОГА</SectionTitle>
+          <p className="text-[10px] text-dim/80 mb-2 leading-snug">
+            Пробуди реликвию — и точи её до бесконечности: <b className="text-fog">каждый уровень усиливает ВСЕ характеристики</b>.
+            Чем выше уровень, тем меньше шанс успеха. Капа не существует.
+          </p>
+          <button disabled={s.hero.gems < GODSTONE.price} onClick={() => d({ type: "BUY_GODSTONE" })}
+            className="btn btn-gold w-full py-2.5 text-[13px] flex items-center justify-center gap-1.5">
+            <Icon n="gem" className="w-4 h-4" filled />ПРОБУДИТЬ ЗА {GODSTONE.price}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  const cost = GODSTONE.cost(gs);
+  const chance = GODSTONE.chance(gs);
+  const afford = s.hero.gold >= cost;
+  return (
+    <div className="panel p-3 relative overflow-hidden" style={{ borderColor: "rgba(251,191,36,0.35)" }}>
+      <div className="absolute -top-10 -right-8 w-36 h-36 rounded-full blur-2xl pointer-events-none" style={{ background: "rgba(251,191,36,0.16)" }} />
+      <div className="relative">
+        <SectionTitle icon="stone"
+          right={<span className="text-[10px] font-display text-gold">ур. {gs} · ∞</span>}>
+          КАМЕНЬ БОГА
+        </SectionTitle>
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-14 h-14 shrink-0 rounded-xl grid place-items-center border anim-float"
+            style={{ borderColor: "#fbbf2466", background: "linear-gradient(160deg, rgba(251,191,36,0.2), rgba(251,191,36,0.04))", color: "#fbbf24", boxShadow: "0 0 18px rgba(251,191,36,0.25)" }}>
+            <Icon n="stone" className="w-8 h-8" />
+          </div>
+          <div className="flex-1 text-[10px] text-dim leading-relaxed">
+            Сейчас даёт: <b className="text-gold">+{6 * gs}% урона и HP</b>, +{4 * gs}% золота/опыта,
+            +{(1.2 * gs).toFixed(1)}% крита, +{(1.5 * gs).toFixed(1)}% скорости, +{2 * gs}% удачи и др.
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <div className="flex justify-between text-[9px] text-dim mb-1">
+              <span>шанс успеха</span><span className="font-bold" style={{ color: chance > 50 ? "#4ade80" : chance > 15 ? "#f0b429" : "#e5484d" }}>{chance}%</span>
+            </div>
+            <Bar v={chance} max={100} color={chance > 50 ? "#4ade80" : chance > 15 ? "#f0b429" : "#e5484d"} h="h-1.5" />
+          </div>
+          <button disabled={!afford} onClick={() => d({ type: "UP_GODSTONE" })}
+            className="btn btn-gold px-3 py-2 text-[11px] shrink-0 flex items-center gap-1">
+            <Icon n="coin" className="w-3.5 h-3.5" filled />{fmt(cost)}
+          </button>
+        </div>
+        <p className="text-[9px] text-dim/70 mt-1.5">При неудаче золото сгорает, уровень стоит на месте. Риск — дело благородное.</p>
+      </div>
+    </div>
+  );
+}
+
 export function HeroTab() {
   const { s, stats } = useGame();
   const cls = CLASSES[s.hero.classId];
   const buffList = s.buffs;
+  const abyssWorn = SLOTS.filter(sl => s.equip[sl]?.abyss).length;
   const rows: { l: string; v: string; c?: string }[] = [
     { l: "Урон", v: fmt(stats.dmg), c: "#ff6b3d" },
     { l: "DPS", v: fmt(stats.dps), c: "#f0b429" },
@@ -154,7 +216,17 @@ export function HeroTab() {
         {(["ring2", "boots"] as Slot[]).map(sl => <SlotBox key={sl} slot={sl} />)}
       </div>
 
+      {abyssWorn > 0 && (
+        <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border"
+          style={{ borderColor: "#ff4d6d55", background: "rgba(255,77,109,0.08)" }}>
+          <Icon n="gate" className="w-4 h-4" style={{ color: "#ff4d6d" }} />
+          <span className="text-[11px] font-bold" style={{ color: "#ff4d6d" }}>Сет Бездны: {abyssWorn}/8</span>
+          <span className="text-[10px] text-dim">+{ABYSS_SET_BONUS * abyssWorn}% урона, HP и +{2 * abyssWorn}% удачи</span>
+        </div>
+      )}
+
       <SharpenPanel />
+      <GodstonePanel />
 
       {buffList.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
