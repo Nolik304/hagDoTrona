@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { RARITY, STAT_LABEL, SLOT_INFO } from "../game/data";
 import type { Item, Slot } from "../game/types";
 
@@ -49,6 +49,11 @@ const P: Record<string, ReactNode> = {
   refresh: (<><path d="M20 8A8 8 0 1 0 21 13" /><path d="M21 3v5h-5" /></>),
   info: (<><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8v.5" /></>),
   wave: (<path d="M2 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />),
+  gate: (<><path d="M4 21V10a8 8 0 0 1 16 0v11" /><path d="M2 21h20" /><path d="M9 21v-8a3 3 0 0 1 6 0v8" /><path d="M12 2v3M8 3l1 2M16 3l-1 2" /></>),
+  stone: (<><path d="M12 2 5 8l2 12h10l2-12Z" /><path d="M5 8h14M12 2v18M9.5 8 12 20l2.5-12" /></>),
+  crossed: (<><path d="M4 4l14 14M20 4 6 18" /><path d="M4 4l3 .5L18.5 16M20 4l-3 .5L5.5 16" /><path d="m5 19 2-2M19 19l-2-2" /></>),
+  drop: (<><path d="M12 3s6 7 6 11.5a6 6 0 0 1-12 0C6 10 12 3 12 3Z" /><path d="M9.5 14a2.5 2.5 0 0 0 2.5 2.5" /></>),
+  ticket: (<><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v3a2 2 0 0 0 0 2v3a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-3a2 2 0 0 0 0-2Z" /><path d="M14 6v12" strokeDasharray="2 2.5" /></>),
   book: (<><path d="M4 4h9a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3Z" /><path d="M16 8h4v12h-4" /><path d="M8 8h4M8 12h4" /></>),
   run: (<><circle cx="14" cy="5" r="2.2" /><path d="M6 21l3-6 3-2-1-5 4 2 3 2M9 8 5 10l1 4" /></>),
   fang: (<path d="M12 2c4 0 7 4 7 9 0 6-4 11-7 11S5 17 5 11c0-5 3-9 7-9Zm0 3c-2 0-4 3-4 6 0 4 2.5 8 4 8s4-4 4-8c0-3-2-6-4-6Z" />),
@@ -58,9 +63,11 @@ const P: Record<string, ReactNode> = {
   route: (<><circle cx="6" cy="5" r="2.2" /><circle cx="18" cy="19" r="2.2" /><path d="M6 7.5V12a3 3 0 0 0 3 3h6a3 3 0 0 1 3 3v-1.5" strokeDasharray="3 2.5" /></>),
 };
 
-export function Icon({ n, className = "w-5 h-5", filled = false }: { n: string; className?: string; filled?: boolean }) {
+export function Icon({ n, className = "w-5 h-5", filled = false, style }: {
+  n: string; className?: string; filled?: boolean; style?: CSSProperties;
+}) {
   return (
-    <svg viewBox="0 0 24 24" className={className} fill={filled ? "currentColor" : "none"}
+    <svg viewBox="0 0 24 24" className={className} style={style} fill={filled ? "currentColor" : "none"}
       stroke="currentColor" strokeWidth={filled ? 0 : 2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       {P[n] ?? P.spark}
     </svg>

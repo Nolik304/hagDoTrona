@@ -1,21 +1,22 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGame } from "../game/useGame";
-import { RELICS, META, RUN_WAVES, RUN_BOSS_EVERY } from "../game/data";
-import { SKILLS } from "../game/data";
+import { RELICS, META, RUN_WAVES, RUN_BOSS_EVERY, SKILLS, CLASSES } from "../game/data";
 import { fmt, runStats } from "../game/logic";
 import { Icon, Bar, SectionTitle } from "./bits";
-import { MonsterArt } from "./art";
+import { MonsterArt, HeroArt } from "./art";
 
 /* ---------- модалка выбора дара ---------- */
 function RunPickModal() {
   const { s, d } = useGame();
   const m = s.modal;
   if (!m || m.t !== "runpick") return null;
+  const portal = s.run.kind === "portal";
+  const accent = portal ? "#ff4d6d" : "#3fd0b6";
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/80 backdrop-blur-[3px]">
       <div className="panel anim-pop w-full max-w-sm p-5">
         <div className="text-center mb-4">
-          <div className="font-display text-[10px] tracking-[0.3em] text-arc mb-1">БОСС ПОВЕРЖЕН</div>
+          <div className="font-display text-[10px] tracking-[0.3em] mb-1" style={{ color: accent }}>БОСС ПОВЕРЖЕН</div>
           <h2 className="font-display text-xl text-fog text-outline">ВЫБЕРИ ДАР БЕЗДНЫ</h2>
           <p className="text-dim text-xs mt-1">Один из трёх. Бездна не повторяет предложений.</p>
         </div>
@@ -23,7 +24,7 @@ function RunPickModal() {
           {m.options.map(id => {
             const def = RELICS.find(r => r.id === id);
             if (!def) return null;
-            const c = def.cursed ? "#e5484d" : "#3fd0b6";
+            const c = def.cursed ? "#e5484d" : accent;
             const rank = s.run.relics[id] || 0;
             return (
               <button key={id} onClick={() => d({ type: "RUN_PICK", id })}
@@ -55,6 +56,7 @@ function RunOverModal() {
   const { s, d } = useGame();
   const m = s.modal;
   if (!m || m.t !== "runover") return null;
+  const portal = s.run.kind === "portal";
   const c = m.win ? "#f0b429" : "#e5484d";
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4 bg-black/80 backdrop-blur-[3px]">
@@ -66,7 +68,7 @@ function RunOverModal() {
             <Icon n={m.win ? "trophy" : "skull"} className="w-8 h-8" />
           </div>
           <h2 className="font-display text-2xl text-outline mb-1" style={{ color: c }}>
-            {m.win ? "БЕЗДНА ПОКОРЕНА!" : "ЗАБЕГ ОКОНЧЕН"}
+            {m.win ? (portal ? "ПОРТАЛ ПОКОРЁН!" : "БЕЗДНА ПОКОРЕНА!") : (portal ? "ПОРТАЛ ВЫПЛЮНУЛ ТЕБЯ" : "ЗАБЕГ ОКОНЧЕН")}
           </h2>
           <p className="text-dim text-xs mb-4">
             {m.win ? "Все 20 волн позади. Такое не забывают." : `Ты пал на волне ${m.wave}. Бездна подождёт.`}
@@ -76,13 +78,24 @@ function RunOverModal() {
               <div className="font-display text-lg text-fog">{m.wave}<span className="text-dim text-xs">/{RUN_WAVES}</span></div>
               <div className="text-[10px] text-dim">волна</div>
             </div>
-            <div className="panel px-4 py-3">
-              <div className="font-display text-lg text-mana flex items-center gap-1"><Icon n="shard" className="w-4 h-4" filled />{fmt(m.shards)}</div>
-              <div className="text-[10px] text-dim">осколков</div>
-            </div>
+            {portal ? (
+              <div className="panel px-4 py-3">
+                <div className="font-display text-lg flex items-center gap-1" style={{ color: "#ff4d6d" }}>
+                  <Icon n="gate" className="w-4 h-4" />{m.win ? "+сет" : "лут"}
+                </div>
+                <div className="text-[10px] text-dim">{m.win ? "Сет Бездны + 15 кр." : "что успел унести"}</div>
+              </div>
+            ) : (
+              <div className="panel px-4 py-3">
+                <div className="font-display text-lg text-mana flex items-center gap-1"><Icon n="shard" className="w-4 h-4" filled />{fmt(m.shards)}</div>
+                <div className="text-[10px] text-dim">осколков</div>
+              </div>
+            )}
           </div>
           <button onClick={() => d({ type: "RUN_CLOSE" })} className="btn btn-gold w-full py-3.5 text-[15px]">ВЕРНУТЬСЯ</button>
-          <p className="text-[10px] text-dim/70 mt-2">Осколки трать в Алтаре — бонусы остаются навсегда.</p>
+          <p className="text-[10px] text-dim/70 mt-2">
+            {portal ? "Сет Бездны уже в рюкзаке. Надень — почувствуй мощь." : "Осколки трать в Алтаре — бонусы остаются навсегда."}
+          </p>
         </div>
       </div>
     </div>
@@ -96,8 +109,18 @@ function ActiveRun() {
   const e = R.enemy;
   const rs = runStats(s);
   const artRef = useRef<HTMLDivElement>(null);
+  const prevHp = useRef(R.hp);
+  const [heroFlash, setHeroFlash] = useState(0);
   const skills = SKILLS.filter(k => k.classId === s.hero.classId);
   const bossesAhead = RUN_WAVES / RUN_BOSS_EVERY;
+  const portal = R.kind === "portal";
+  const accent = portal ? "#ff4d6d" : "#3fd0b6";
+
+  useEffect(() => {
+    const f = R.hp < prevHp.current ? 1 : 0;
+    if (f) setHeroFlash(x => x + 1);
+    prevHp.current = R.hp;
+  }, [R.hp]);
 
   const relicList = RELICS.filter(rf => (R.relics[rf.id] || 0) > 0);
 
@@ -106,7 +129,9 @@ function ActiveRun() {
       {/* прогресс забега */}
       <div className="panel px-3 py-2.5">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="font-display text-[12px] tracking-wider text-arc">ЭКСПЕДИЦИЯ</span>
+          <span className="font-display text-[12px] tracking-wider" style={{ color: accent }}>
+            {portal ? "ПОРТАЛ БЕЗДНЫ" : "ЭКСПЕДИЦИЯ"}
+          </span>
           <span className="text-[11px] text-dim tabular-nums">Волна <b className="text-fog">{R.wave}</b>/{RUN_WAVES}</span>
         </div>
         <div className="flex items-center gap-1">
@@ -116,7 +141,7 @@ function ActiveRun() {
             const cur = R.wave <= bossWave && R.wave > i * RUN_BOSS_EVERY;
             return (
               <div key={i} className="flex-1 flex items-center gap-1">
-                <div className={`flex-1 h-1.5 rounded-full ${done ? "bg-arc" : cur ? "bg-arc/50" : "bg-line/60"}`} />
+                <div className="flex-1 h-1.5 rounded-full" style={{ background: done ? accent : cur ? accent + "80" : "#27313f99" }} />
                 <Icon n="skull" className={`w-4 h-4 shrink-0 ${done ? "text-blood" : cur ? "text-fog" : "text-dim/40"}`} filled={done} />
               </div>
             );
@@ -125,22 +150,36 @@ function ActiveRun() {
         <div className="text-[9px] text-dim/80 mt-1 text-right">боссы на 5 · 10 · 15 · 20</div>
       </div>
 
-      {/* арена */}
+      {/* арена: герой против твари */}
       <div className="panel relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none"
-          style={{ background: "radial-gradient(420px 240px at 50% 30%, rgba(63,208,182,0.12), transparent 70%)" }} />
+          style={{ background: portal
+            ? "radial-gradient(420px 240px at 50% 30%, rgba(255,77,109,0.14), transparent 70%)"
+            : "radial-gradient(420px 240px at 50% 30%, rgba(63,208,182,0.12), transparent 70%)" }} />
         <div className="relative px-4 pt-3 flex items-center justify-between">
-          <span className="font-display text-[13px] tracking-wide text-arc">РАЗЛОМ БЕЗДНЫ</span>
+          <span className="font-display text-[13px] tracking-wide" style={{ color: accent }}>
+            {portal ? "ВНУТРИ ПОРТАЛА" : "РАЗЛОМ БЕЗДНЫ"}
+          </span>
           <span className="text-[10px] text-dim italic">фарм на паузе</span>
         </div>
-        <div className="relative h-48 grid place-items-center">
-          {e && (
-            <>
-              <div ref={artRef} className={e.boss ? "w-44 h-44" : "w-36 h-36"}>
-                <MonsterArt k={e.key} boss={e.boss} />
+        <div className="relative h-48">
+          <div className="absolute inset-0 flex items-center justify-between px-3">
+            {/* герой */}
+            <div key={"hf" + heroFlash} className={`w-28 h-36 ${heroFlash ? "anim-redflash" : ""}`}>
+              <div style={{ animation: `lungeR ${Math.max(0.3, 1 / rs.as)}s ease-in-out infinite` }}>
+                <div className="h-32"><HeroArt classId={s.hero.classId} equip={s.equip} /></div>
               </div>
-            </>
-          )}
+            </div>
+            <span className="font-display text-dim/25 text-xl select-none">VS</span>
+            {/* враг */}
+            {e && (
+              <div ref={artRef} className={e.boss ? "w-40 h-40" : "w-32 h-32"}>
+                <div style={{ animation: `lungeL ${Math.max(0.4, 1 / e.as)}s ease-in-out infinite` }}>
+                  <MonsterArt k={e.key} boss={e.boss} />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div className="relative px-4 pb-3">
           {e && (
@@ -153,10 +192,9 @@ function ActiveRun() {
               <Bar v={e.hp} max={e.maxHp} color={e.boss ? "#e5484d" : "#ff6b3d"} h="h-4" shine />
             </>
           )}
-          {/* hp героя в забеге */}
           <div className="mt-2">
             <div className="flex justify-between text-[10px] text-dim mb-0.5">
-              <span>Твоё HP</span><span className="tabular-nums">{fmt(Math.max(0, R.hp))}/{fmt(rs.maxHp)}</span>
+              <span>{s.hero.name} · HP</span><span className="tabular-nums">{fmt(Math.max(0, R.hp))}/{fmt(rs.maxHp)}</span>
             </div>
             <Bar v={R.hp} max={rs.maxHp} color={R.hp / rs.maxHp < 0.3 ? "#e5484d" : "#4ade80"} h="h-3" shine />
           </div>
@@ -168,7 +206,7 @@ function ActiveRun() {
         {relicList.length === 0 && <span className="text-[10px] text-dim/60 px-1">Даров пока нет — одолей босса, чтобы выбрать.</span>}
         {relicList.map(rf => {
           const rank = R.relics[rf.id] || 0;
-          const c = rf.cursed ? "#e5484d" : "#3fd0b6";
+          const c = rf.cursed ? "#e5484d" : accent;
           return (
             <span key={rf.id} className="text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1"
               style={{ color: c, borderColor: c + "55", background: c + "12" }}>
@@ -187,8 +225,8 @@ function ActiveRun() {
           return (
             <button key={sk.id} onClick={() => d({ type: "RUN_CAST", id: sk.id })} disabled={!ready}
               className="relative btn btn-dark py-2.5 px-1 h-[64px] flex flex-col items-center justify-center gap-0.5"
-              style={ready ? { borderColor: "#3fd0b666" } : undefined}>
-              <Icon n={sk.icon} className="w-5 h-5 text-arc" />
+              style={ready ? { borderColor: accent + "66" } : undefined}>
+              <Icon n={sk.icon} className="w-5 h-5" style={{ color: accent } as never} />
               <span className="text-[8px] text-fog font-body font-semibold text-center leading-tight px-0.5">{sk.name}</span>
               {!locked && cd > 0 && (
                 <span className="absolute inset-x-0 bottom-0 bg-abyss/85 border-t border-line flex items-end justify-center pointer-events-none"
@@ -202,38 +240,27 @@ function ActiveRun() {
         })}
         <button onClick={() => d({ type: "RUN_USE_POTION" })} disabled={s.hero.potions <= 0}
           className="btn btn-dark py-2.5 px-1 h-[64px] flex flex-col items-center justify-center gap-0.5"
-          style={s.hero.potions > 0 ? { borderColor: "#3fd0b666" } : undefined}>
-          <Icon n="flask" className="w-5 h-5 text-arc" />
+          style={s.hero.potions > 0 ? { borderColor: accent + "66" } : undefined}>
+          <Icon n="flask" className="w-5 h-5" style={{ color: accent } as never} />
           <span className="text-[8px] text-fog font-body font-semibold">Зелье</span>
-          <span className="text-[10px] text-arc font-body font-bold">×{s.hero.potions}</span>
+          <span className="text-[10px] font-body font-bold" style={{ color: accent }}>×{s.hero.potions}</span>
         </button>
       </div>
 
       <button onClick={() => d({ type: "ABANDON_RUN" })} className="btn btn-dark w-full py-2.5 text-[12px] flex items-center justify-center gap-1.5 text-dim">
-        <Icon n="x" className="w-4 h-4" />Сдаться (половина осколков)
+        <Icon n="x" className="w-4 h-4" />{portal ? "Сбежать из Портала (лут с собой)" : "Сдаться (половина осколков)"}
       </button>
     </div>
   );
 }
 
-/* ---------- главный экран ---------- */
-export function RunScreen() {
+/* ---------- стартовый экран ---------- */
+function StartScreen() {
   const { s, d } = useGame();
-  if (s.run.active) {
-    return (
-      <>
-        <ActiveRun />
-        <RunPickModal />
-        <RunOverModal />
-      </>
-    );
-  }
-
+  const hasBlood = s.blood > 0;
   return (
-    <div className="flex flex-col gap-3">
-      <RunOverModal />
-
-      {/* интро */}
+    <>
+      {/* Экспедиция */}
       <div className="panel p-4 relative overflow-hidden">
         <div className="absolute -top-16 -right-12 w-44 h-44 rounded-full bg-arc/12 blur-2xl pointer-events-none" />
         <div className="relative">
@@ -254,13 +281,69 @@ export function RunScreen() {
               <div className="font-display text-lg text-mana flex items-center justify-center gap-1"><Icon n="shard" className="w-4 h-4" filled />{fmt(s.shards)}</div>
               <div className="text-[9px] text-dim">осколки бездны</div>
             </div>
+            <div className="flex-1 bg-abyss/60 border border-line/60 rounded-xl py-2.5 text-center">
+              <div className="font-display text-lg flex items-center justify-center gap-1" style={{ color: "#ff4d6d" }}>
+                <Icon n="drop" className="w-4 h-4" filled />{s.blood}
+              </div>
+              <div className="text-[9px] text-dim">кровь демона</div>
+            </div>
           </div>
-          <button onClick={() => d({ type: "START_RUN" })} className="btn btn-arc w-full py-3.5 text-[15px]">
+          <button onClick={() => d({ type: "START_RUN", kind: "exp" })} className="btn btn-arc w-full py-3.5 text-[15px]">
             НАЧАТЬ ЭКСПЕДИЦИЮ
           </button>
-          <p className="text-[10px] text-dim/70 mt-2 text-center">Фарм встанет на паузу, пока герой в разломе.</p>
+          <p className="text-[10px] text-dim/70 mt-2 text-center">С боссов Экспедиции редко капает Кровь Демона (7%) — ключ к Порталу.</p>
         </div>
       </div>
+
+      {/* Портал Бездны */}
+      <div className="panel p-4 relative overflow-hidden" style={{ borderColor: hasBlood ? "#ff4d6d55" : undefined }}>
+        <div className="absolute -top-16 -left-12 w-44 h-44 rounded-full blur-2xl pointer-events-none" style={{ background: "rgba(255,77,109,0.12)" }} />
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-1">
+            <span className={hasBlood ? "anim-portal inline-flex" : "inline-flex"}><Icon n="gate" className="w-6 h-6" style={{ color: "#ff4d6d" } as never} /></span>
+            <h2 className="font-display text-xl text-fog text-outline">ПОРТАЛ БЕЗДНЫ</h2>
+            {s.run.kind === "portal" && <span className="text-[9px] font-display text-[#ff4d6d] border border-[#ff4d6d55] rounded px-1">активен</span>}
+          </div>
+          <p className="text-[12px] text-dim leading-relaxed mb-3">
+            Тот же рогалик, но злее: твари Бездны, жирнее золото, а с боссов падает
+            <b style={{ color: "#ff4d6d" }}> Сет Бездны</b> (редкость «Бездна») — 7 вещей с бонусом за комплект.
+            Победа даёт <b className="text-mana">15 кристаллов</b> и ещё одну вещь сета.
+          </p>
+          {hasBlood ? (
+            <button onClick={() => d({ type: "START_RUN", kind: "portal" })} className="btn btn-ember w-full py-3.5 text-[15px] flex items-center justify-center gap-2">
+              <Icon n="drop" className="w-4 h-4" filled />ВОЙТИ В ПОРТАЛ (−1 кровь)
+            </button>
+          ) : (
+            <div className="border border-[#ff4d6d33] rounded-xl p-3 text-center bg-[#ff4d6d0a]">
+              <div className="flex items-center justify-center gap-1.5 text-[#ff4d6d] font-display text-[13px] mb-1">
+                <Icon n="lock" className="w-4 h-4" />ПРОХОД ЗАПЕЧАТАН
+              </div>
+              <p className="text-[10px] text-dim">Нужна <b style={{ color: "#ff4d6d" }}>Кровь Демона</b>. Выбивай боссов в Экспедиции — шанс ~7% с каждого.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ---------- главный экран ---------- */
+export function RunScreen() {
+  const { s, d } = useGame();
+  if (s.run.active) {
+    return (
+      <>
+        <ActiveRun />
+        <RunPickModal />
+        <RunOverModal />
+      </>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <RunOverModal />
+      <StartScreen />
 
       {/* Алтарь */}
       <div className="panel p-3">

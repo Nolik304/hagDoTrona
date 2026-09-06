@@ -130,7 +130,20 @@ export const RARITY: { name: string; color: string; mult: number }[] = [
   { name: "Редкий", color: "#38bdf8", mult: 1.8 },
   { name: "Эпический", color: "#c084fc", mult: 2.4 },
   { name: "Легендарный", color: "#fbbf24", mult: 3.2 },
+  { name: "Бездна", color: "#ff4d6d", mult: 4.4 },
 ];
+
+/* ================= СЕТ БЕЗДНЫ (Портал) ================= */
+export const ABYSS_SET: Partial<Record<BaseSlot, { name: string; stats: Partial<Record<StatKey, number>> }>> = {
+  weapon: { name: "Коготь Пожирателя", stats: { dmg: 16, dmgPct: 14, crit: 6 } },
+  helm: { name: "Венец Пустоты", stats: { hp: 90, armor: 22, xpPct: 8 } },
+  amulet: { name: "Око Бездны", stats: { crit: 9, critDmg: 28, dmgPct: 10 } },
+  armor: { name: "Панцирь Отродья", stats: { armor: 30, hp: 120, regen: 1.4 } },
+  gloves: { name: "Когтистые перчатки Бездны", stats: { as: 12, crit: 6, dmgPct: 8 } },
+  boots: { name: "Поступь Тьмы", stats: { armor: 18, goldPct: 16, hp: 60 } },
+  ring: { name: "Печатка Отродья", stats: { critDmg: 24, luck: 10, dmgPct: 10 } },
+};
+export const ABYSS_SET_BONUS = 3; // % урона и HP за каждую надетую вещь сета
 
 export const SLOT_INFO: Record<BaseSlot, { n: string; icon: string }> = {
   weapon: { n: "Оружие", icon: "sword" },
@@ -234,8 +247,29 @@ export const INV_CAP = 40;
 /* ================= QUESTS ================= */
 export interface QuestDef {
   id: string; title: string; desc: string; metric: string; target: number;
-  reward: { gold?: number; gems?: number }; flavor: string;
+  reward: { gold?: number; gems?: number; tokens?: number }; flavor: string;
 }
+
+/* ================= КАМЕНЬ БОГА ================= */
+export const GODSTONE = {
+  price: 40, // кристаллы за пробуждение
+  cost: (lvl: number) => Math.round(400 * Math.pow(1.33, lvl)),
+  chance: (lvl: number) => Math.max(1.5, Math.round(90 * Math.pow(0.92, lvl) * 10) / 10),
+  desc: "бесконечная шкала: урон, HP, крит, скорость, удача, золото, опыт, броня",
+};
+
+/* ================= ДУЭЛИ ================= */
+export const DUEL_NAMES = [
+  "Шмыга Одноглазый", "Барон фон Тыква", "Лысый Джакомо", "Сэр Помидор",
+  "Хозяйка Болота", "Граф Носок", "Ведьма с 8-го этажа", "Кузнец Хряк",
+  "Тёмный Олег", "Инквизитор Булка", "Паладин Штифт", "Жнец-стажёр",
+  "Королева Слизней", "Гном-переросток", "Мастер Меча (самоучка)", "Тень Утюга",
+];
+export const mmrRank = (mmr: number) =>
+  mmr < 900 ? "Новичок" : mmr < 1150 ? "Боец" : mmr < 1400 ? "Гладиатор" :
+  mmr < 1650 ? "Чемпион" : mmr < 1900 ? "Мастер" : "Легенда Бездны";
+export const DUEL_TOKENS_START = 3;
+export const DUEL_TOKENS_MAX = 10;
 export const QUESTS: QuestDef[] = [
   { id: "q1", title: "Разминка", desc: "Победи 15 врагов", metric: "kills", target: 15, reward: { gold: 120 }, flavor: "Гильдия даёт новичкам самое грязное дело. Держи метлу... то есть меч." },
   { id: "q2", title: "Приодеться", desc: "Надень 3 предмета экипировки", metric: "equippedCount", target: 3, reward: { gold: 200, gems: 3 }, flavor: "Голый герой — плохая реклама для гильдии." },
@@ -251,13 +285,13 @@ export const QUESTS: QuestDef[] = [
 
 export const DAILIES: QuestDef[] = [
   { id: "d1", title: "Ежедневная зачистка", desc: "Победи 100 врагов сегодня", metric: "dkills", target: 100, reward: { gold: 250 }, flavor: "" },
-  { id: "d2", title: "Охота на главаря", desc: "Победи 1 босса сегодня", metric: "dbosses", target: 1, reward: { gems: 5 }, flavor: "" },
+  { id: "d2", title: "Охота на главаря", desc: "Победи 1 босса сегодня", metric: "dbosses", target: 1, reward: { gems: 5, tokens: 1 }, flavor: "" },
   { id: "d3", title: "Золотая лихорадка", desc: "Заработай 2000 золота сегодня", metric: "dgold", target: 2000, reward: { gems: 3 }, flavor: "" },
 ];
 
 export const WEEKLIES: QuestDef[] = [
   { id: "w1", title: "Неделя зачистки", desc: "Победи 500 врагов за неделю", metric: "wkills", target: 500, reward: { gold: 1500, gems: 15 }, flavor: "Гильдия объявила тотальную зачистку. Слизни создают профсоюз." },
-  { id: "w2", title: "Гроза главарей", desc: "Победи 5 боссов за неделю", metric: "wbosses", target: 5, reward: { gems: 30 }, flavor: "Пять голов — пять наград. Боссы скидываются на адвоката." },
+  { id: "w2", title: "Гроза главарей", desc: "Победи 5 боссов за неделю", metric: "wbosses", target: 5, reward: { gems: 30, tokens: 2 }, flavor: "Пять голов — пять наград. Боссы скидываются на адвоката." },
   { id: "w3", title: "Скиллодром", desc: "Примени навыки 100 раз за неделю", metric: "wcasts", target: 100, reward: { gold: 1000, gems: 10 }, flavor: "Кнопки стёрлись до дыр. Это считается за кардио." },
 ];
 

@@ -8,9 +8,10 @@ import { HeroTab, InventoryTab } from "./ui/HeroScreens";
 import { SkillsScreen } from "./ui/SkillsScreen";
 import { MoreScreen } from "./ui/MoreScreen";
 import { RunScreen } from "./ui/RunScreen";
+import { DuelScreen } from "./ui/DuelScreen";
 import { Modals } from "./ui/Modals";
 
-type Tab = "battle" | "run" | "hero" | "inv" | "skills" | "more";
+type Tab = "battle" | "run" | "duel" | "hero" | "inv" | "skills" | "more";
 
 function HUD() {
   const { s, stats } = useGame();
@@ -107,14 +108,15 @@ function Nav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const { s } = useGame();
   const items: { id: Tab; n: string; i: string; badge?: boolean }[] = [
     { id: "battle", n: "Поход", i: "sword" },
-    { id: "run", n: "Рогалик", i: "route", badge: s.shards > 0 && !s.run.active },
+    { id: "run", n: "Рогалик", i: "route", badge: (s.shards > 0 || s.blood > 0) && !s.run.active },
+    { id: "duel", n: "Дуэли", i: "crossed", badge: s.duel.tokens > 0 && s.duel.state === "idle" },
     { id: "hero", n: "Герой", i: "user" },
     { id: "inv", n: "Рюкзак", i: "bag", badge: s.inv.length > 0 },
     { id: "skills", n: "Скилы", i: "spark", badge: s.hero.skillPoints > 0 },
     { id: "more", n: "Ещё", i: "dots" },
   ];
   return (
-    <div className="panel mx-3 mb-2 safe-b px-1.5 py-1.5 grid grid-cols-6 gap-1 relative z-10">
+    <div className="panel mx-3 mb-2 safe-b px-1 py-1.5 grid grid-cols-7 gap-0.5 relative z-10">
       {items.map(it => {
         const active = tab === it.id;
         return (
@@ -145,6 +147,7 @@ function Shell() {
           <div key={tab} className="anim-rise">
             {tab === "battle" && <BattleScreen />}
             {tab === "run" && <RunScreen />}
+            {tab === "duel" && <DuelScreen />}
             {tab === "hero" && <HeroTab />}
             {tab === "inv" && <InventoryTab />}
             {tab === "skills" && <SkillsScreen />}

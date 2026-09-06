@@ -2,7 +2,7 @@ export type ClassId = "mage" | "archer";
 
 export type BaseSlot = "weapon" | "helm" | "amulet" | "armor" | "gloves" | "boots" | "ring";
 export type Slot = Exclude<BaseSlot, "ring"> | "ring1" | "ring2";
-export type Rarity = 0 | 1 | 2 | 3 | 4;
+export type Rarity = 0 | 1 | 2 | 3 | 4 | 5; // 5 = «Бездна» (сет Портала)
 
 export type StatKey =
   | "dmg" | "dmgPct" | "hp" | "armor" | "crit" | "critDmg"
@@ -16,6 +16,7 @@ export interface Item {
   ilvl: number;
   stats: Partial<Record<StatKey, number>>;
   sell: number;
+  abyss?: boolean; // предмет Сета Бездны
 }
 
 export interface Enemy {
@@ -107,8 +108,43 @@ export interface WeeklyS {
   claimed: string[];
 }
 
+export interface DuelFoe {
+  name: string;
+  classId: ClassId;
+  mmr: number;
+  hp: number;
+  maxHp: number;
+  dmg: number;
+  as: number;
+  crit: number;
+  critDmg: number;
+  power: number;
+}
+
+export interface DuelS {
+  state: "idle" | "search" | "fight" | "result";
+  mmr: number;
+  tokens: number;
+  wins: number;
+  losses: number;
+  searchT: number;
+  foe: DuelFoe | null;
+  heroHp: number;
+  heroT: number;
+  foeT: number;
+  skillT: number;
+  foeSkillT: number;
+  cds: Record<string, number>;
+  fx: Fx[];
+  log: string[];
+  result: "win" | "lose" | null;
+  delta: number;
+  reward: number;
+}
+
 export interface RunS {
   active: boolean;
+  kind: "exp" | "portal"; // экспедиция или Портал Бездны
   wave: number; // 1..20
   enemy: Enemy | null;
   heroT: number;
@@ -151,10 +187,13 @@ export interface GameState {
   weekly: WeeklyS;
   vip: number; // 0..5
   slotLevel: Record<Slot, number>; // заточка слотов (привязана к слоту, не к предмету)
-  run: RunS; // рогалик-режим «Экспедиция»
+  run: RunS; // рогалик-режим «Экспедиция» / «Портал Бездны»
   shards: number; // осколки бездны — мета-валюта
   meta: Record<string, number>; // мета-апгрейды (Алтарь)
   bestWave: number;
+  blood: number; // кровь демона — ключ к Порталу Бездны
+  godstone: number | null; // Камень Бога: null — не пробуждён, иначе уровень 0..∞
+  duel: DuelS; // дуэли с MMR
   shopBuys: Record<string, number>;
   lastSeen: number;
   uidSeq: number;
@@ -198,13 +237,18 @@ export type Action =
   | { type: "CHOOSE_EVENT"; idx: number }
   | { type: "UPGRADE_SLOT"; slot: Slot }
   | { type: "BUY_VIP" }
-  | { type: "START_RUN" }
+  | { type: "START_RUN"; kind: "exp" | "portal" }
   | { type: "ABANDON_RUN" }
   | { type: "RUN_CAST"; id: string }
   | { type: "RUN_USE_POTION" }
   | { type: "RUN_PICK"; id: string }
   | { type: "RUN_CLOSE" }
   | { type: "BUY_META"; id: string }
+  | { type: "BUY_GODSTONE" }
+  | { type: "UP_GODSTONE" }
+  | { type: "DUEL_SEARCH" }
+  | { type: "DUEL_CAST"; id: string }
+  | { type: "DUEL_CLOSE" }
   | { type: "CLOSE_MODAL" }
   | { type: "DISMISS_TOAST"; id: number }
   | { type: "RESET" };
