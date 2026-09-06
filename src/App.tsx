@@ -9,6 +9,7 @@ import { SkillsScreen } from "./ui/SkillsScreen";
 import { MoreScreen } from "./ui/MoreScreen";
 import { RunScreen } from "./ui/RunScreen";
 import { Modals } from "./ui/Modals";
+import { initVK } from "./platform/vk";
 
 type Tab = "battle" | "run" | "hero" | "inv" | "skills" | "more";
 
@@ -162,18 +163,7 @@ function Shell() {
 
 export default function App() {
   useEffect(() => {
-    // VK Mini Apps bridge — безопасная инициализация только внутри VK
-    (async () => {
-      try {
-        if (typeof window !== "undefined" && window.self !== window.top) {
-          const bridge = await import("@vkontakte/vk-bridge");
-          await bridge.default.send("VKWebAppInit");
-          bridge.default.send("VKWebAppSetViewSettings", {
-            status_bar_style: "light", action_bar_color: "#0b0e13",
-          }).catch(() => undefined);
-        }
-      } catch { /* не VK — играем как есть */ }
-    })();
+    void initVK();
   }, []);
 
   return (
